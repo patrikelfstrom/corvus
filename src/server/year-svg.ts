@@ -4,6 +4,9 @@ import { ActivityCalendar } from 'react-activity-calendar';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { getDatabase, initDatabaseSchema } from './db/index.ts';
 
+export type CalendarColorScheme = 'light' | 'dark';
+export type CalendarTheme = 'corvus' | 'github';
+
 type SQLResult<T> = {
   lastInsertRowid?: number | undefined;
   changes?: number | undefined;
@@ -18,18 +21,28 @@ interface ActivityPoint {
 
 const EMPTY_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="40"></svg>';
-const CALENDAR_THEME = ['#F7FCFD', '#A5D6E4', '#52A3C3', '#006699', '#003960'];
+
+const themes = {
+  corvus: {
+    light: ['#F7FCFD', '#A5D6E4', '#52A3C3', '#006699', '#003960'],
+    dark: ['#003960', '#006699', '#52A3C3', '#A5D6E4', '#F7FCFD'],
+  },
+  github: {
+    light: ['#eff2f5', '#aceebb', '#4ac26b', '#2da44e', '#116329'],
+    dark: ['#151b23', '#033a16', '#196c2e', '#2ea043', '#56d364'],
+  },
+};
 const WEEKDAY_LABELS: Array<DayName> = ['tue', 'thu', 'sat'];
 const SVG_TEXT_STYLE = `<style><![CDATA[
-  @font-face {
-    font-family: "JetBrains Mono Variable";
-    src: url("/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
-    font-weight: 100 800;
-    font-style: normal;
-    font-display: swap;
-  }
   text {
-    font-family: "JetBrains Mono Variable", "JetBrains Mono", monospace;
+    font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
+    font-size: 12px;
+
+    color: #f0f6fc;
+
+    @media (prefers-color-scheme: light) {
+      color: #1f2328;
+    }
   }
 ]]></style>`;
 
@@ -170,7 +183,7 @@ function toStandaloneSvg(svg: string): string {
     return withNamespace.replace(/(<svg[^>]*>)/, `$1${SVG_TEXT_STYLE}`);
   }
 
-  const background = `<rect x="0" y="0" width="${widthMatch[1]}" height="${heightMatch[1]}" fill="white"/>`;
+  const background = `<rect x="0" y="0" width="${widthMatch[1]}" height="${heightMatch[1]}" fill="none"/>`;
   return withNamespace.replace(
     /(<svg[^>]*>)/,
     `$1${SVG_TEXT_STYLE}${background}`,
@@ -181,6 +194,8 @@ function renderCalendarSvg(
   startDate: Date,
   endDate: Date,
   countsByDate: Map<string, number>,
+  colorScheme: CalendarColorScheme,
+  theme: CalendarTheme,
 ): string {
   const activities = buildActivities(startDate, endDate, countsByDate);
 
@@ -195,9 +210,9 @@ function renderCalendarSvg(
       blockSize: 12,
       blockMargin: 4,
       blockRadius: 2,
-      fontSize: 14,
-      colorScheme: 'light',
-      theme: { light: CALENDAR_THEME },
+      fontSize: 12,
+      colorScheme,
+      theme: themes[theme],
       showWeekdayLabels: WEEKDAY_LABELS,
       showTotalCount: false,
       showColorLegend: false,
@@ -225,6 +240,8 @@ function renderCalendarSvg(
 async function renderDateRangeSvg(
   startDate: Date,
   endDate: Date,
+  colorScheme: CalendarColorScheme,
+  theme: CalendarTheme,
 ): Promise<string> {
   const normalizedStartDate = toUtcDateOnly(startDate);
   const normalizedEndDate = toUtcDateOnly(endDate);
@@ -253,10 +270,14 @@ async function renderDateRangeSvg(
     return EMPTY_SVG;
   }
 
-  return renderCalendarSvg(start, end, countsByDate);
+  return renderCalendarSvg(start, end, countsByDate, colorScheme, theme);
 }
 
-export async function renderRollingYearsSvg(years: number): Promise<string> {
+export async function renderRollingYearsSvg(
+  years: number,
+  colorScheme: CalendarColorScheme = 'light',
+  theme: CalendarTheme = 'corvus',
+): Promise<string> {
   if (!Number.isInteger(years) || years < 1) {
     return EMPTY_SVG;
   }
@@ -274,5 +295,5 @@ export async function renderRollingYearsSvg(years: number): Promise<string> {
     end = today;
   }
 
-  return renderDateRangeSvg(start, end);
+  return renderDateRangeSvg(start, end, colorScheme, theme);
 }

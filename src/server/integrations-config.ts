@@ -45,7 +45,7 @@ const DEFAULT_INTEGRATIONS_CONFIG_TEMPLATE = `# Integration configuration
 #       repository_exclude:
 #         - archive
 
-integrations:
+integrations: []
 `;
 
 const integrationDefinitionShellSchema = z

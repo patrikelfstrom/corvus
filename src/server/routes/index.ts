@@ -14,14 +14,29 @@ function renderIndexHtml(): string {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Corvus</title>
     <style>
+
+      :root {
+        --color: #f0f6fc;
+        --color-muted: #9198a1;
+        --cell-empty: #151b23;
+        --background: #0d1117;
+
+        @media (prefers-color-scheme: light) {
+          --color: #1f2328;
+          --color-muted: #59636e;
+          --cell-empty: #eff2f5;
+          --background: #ffffff;
+        }
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
         display: grid;
         place-items: center;
-        font-family: "JetBrains Mono", "Menlo", "Monaco", monospace;
-        background: #f9fbfc;
-        color: #102a43;
+        font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
+        background: var(--background);
+        color: var(--color);
       }
 
       ul {
