@@ -11,7 +11,8 @@ Calendar is powered by [react-activity-calendar](https://github.com/grubersjoe/r
 
 1. Run Corvus with Docker Compose
 2. Configure integrations in `data/integrations.yaml`
-3. Access your contribution calendar at `http://localhost:3000/year.svg`
+3. Configure optional themes in `data/config.yaml`
+4. Access your contribution calendar at `http://localhost:3000/year.svg`
 
 Self-host using docker compose:
 
@@ -37,6 +38,7 @@ docker run --rm -p 3000:3000 -v corvus-data:/app/data ghcr.io/patrikelfstrom/cor
 
 ## Config
 
+### Integrations
 Integrations are configured in `data/integrations.yaml`.
 You can add multiple integrations with different providers and filters.
 
@@ -97,6 +99,43 @@ integrations:
       repository_exclude:
         - archive
 ```
+
+### Themes
+
+Corvus comes with two built-in themes, `corvus` and `github`, which can be selected by setting the default `theme` property in `data/config.yaml` or with the `theme` query parameter, for example `/year.svg?theme=github`.
+
+```yaml
+theme: github
+```
+
+#### Custom themes
+You can also create custom themes under the `themes` property in `data/config.yaml`:
+
+```yaml
+themes:
+  fuchsia:
+    light:
+      - "#eff2f5"
+      - "#fbb4b9"
+      - "#f768a1"
+      - "#c51b8a"
+      - "#7a0177"
+    dark:
+      - "#151b23"
+      - "#7a0177"
+      - "#c51b8a"
+      - "#f768a1"
+      - "#fbb4b9"
+
+```
+Custom themes are available in addition to the built-in themes and can still be overridden with the `theme` query parameter, for example `/year.svg?theme=fuchsia`.
+
+
+#### Dark mode
+Corvus supports dark mode and the calendar will automatically switch between light and dark themes based on the user's system preferences. 
+
+> [!NOTE]  
+> `Sec-CH-Prefers-Color-Scheme` header is currently used for client color scheme detection, but browser support is currently limited.
 
 ## Environment defaults
 

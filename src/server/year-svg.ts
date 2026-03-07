@@ -2,10 +2,18 @@ import { cloneElement, createElement } from 'react';
 import type { Activity, DayName } from 'react-activity-calendar';
 import { ActivityCalendar } from 'react-activity-calendar';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { loadConfig } from './config.ts';
 import { getDatabase, initDatabaseSchema } from './db/index.ts';
+import {
+  DEFAULT_COLOR_SCHEME,
+  DEFAULT_THEME_NAME,
+  parseColorScheme,
+  parseThemeName,
+  type ThemeMap,
+} from './themes.ts';
 
 export type CalendarColorScheme = 'light' | 'dark';
-export type CalendarTheme = 'corvus' | 'github';
+export type CalendarTheme = string;
 
 type SQLResult<T> = {
   lastInsertRowid?: number | undefined;
@@ -22,16 +30,6 @@ interface ActivityPoint {
 const EMPTY_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="40"></svg>';
 
-const themes = {
-  corvus: {
-    light: ['#F7FCFD', '#A5D6E4', '#52A3C3', '#006699', '#003960'],
-    dark: ['#003960', '#006699', '#52A3C3', '#A5D6E4', '#F7FCFD'],
-  },
-  github: {
-    light: ['#eff2f5', '#aceebb', '#4ac26b', '#2da44e', '#116329'],
-    dark: ['#151b23', '#033a16', '#196c2e', '#2ea043', '#56d364'],
-  },
-};
 const WEEKDAY_LABELS: Array<DayName> = ['tue', 'thu', 'sat'];
 const SVG_TEXT_STYLE = `<style><![CDATA[
   text {
@@ -196,10 +194,13 @@ function renderCalendarSvg(
   countsByDate: Map<string, number>,
   colorScheme: CalendarColorScheme,
   theme: CalendarTheme,
+  availableThemes: ThemeMap,
 ): string {
   const activities = buildActivities(startDate, endDate, countsByDate);
+  const resolvedTheme =
+    availableThemes[theme] ?? availableThemes[DEFAULT_THEME_NAME];
 
-  if (activities.length === 0) {
+  if (activities.length === 0 || !resolvedTheme) {
     return EMPTY_SVG;
   }
 
@@ -212,7 +213,7 @@ function renderCalendarSvg(
       blockRadius: 2,
       fontSize: 12,
       colorScheme,
-      theme: themes[theme],
+      theme: resolvedTheme,
       showWeekdayLabels: WEEKDAY_LABELS,
       showTotalCount: false,
       showColorLegend: false,
@@ -242,6 +243,7 @@ async function renderDateRangeSvg(
   endDate: Date,
   colorScheme: CalendarColorScheme,
   theme: CalendarTheme,
+  availableThemes: ThemeMap,
 ): Promise<string> {
   const normalizedStartDate = toUtcDateOnly(startDate);
   const normalizedEndDate = toUtcDateOnly(endDate);
@@ -270,17 +272,30 @@ async function renderDateRangeSvg(
     return EMPTY_SVG;
   }
 
-  return renderCalendarSvg(start, end, countsByDate, colorScheme, theme);
+  return renderCalendarSvg(
+    start,
+    end,
+    countsByDate,
+    colorScheme,
+    theme,
+    availableThemes,
+  );
 }
 
 export async function renderRollingYearsSvg(
   years: number,
-  colorScheme: CalendarColorScheme = 'light',
-  theme: CalendarTheme = 'corvus',
+  colorScheme: string | undefined = DEFAULT_COLOR_SCHEME,
+  theme: CalendarTheme = DEFAULT_THEME_NAME,
 ): Promise<string> {
   if (!Number.isInteger(years) || years < 1) {
     return EMPTY_SVG;
   }
+
+  const config = loadConfig();
+  const availableThemes = config.themes;
+  const defaultTheme = parseThemeName(config.theme, availableThemes);
+  const resolvedColorScheme = parseColorScheme(colorScheme);
+  const resolvedTheme = parseThemeName(theme, availableThemes, defaultTheme);
 
   let start: Date;
   let end: Date;
@@ -295,5 +310,11 @@ export async function renderRollingYearsSvg(
     end = today;
   }
 
-  return renderDateRangeSvg(start, end, colorScheme, theme);
+  return renderDateRangeSvg(
+    start,
+    end,
+    resolvedColorScheme,
+    resolvedTheme,
+    availableThemes,
+  );
 }
