@@ -80,6 +80,18 @@ export function parseColorScheme(value: string | undefined): ColorScheme {
   return result.success ? result.data : DEFAULT_COLOR_SCHEME;
 }
 
+export function parseOptionalColorScheme(
+  value: string | undefined,
+): ColorScheme | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  const result = colorSchemesSchema.safeParse(value);
+
+  return result.success ? result.data : undefined;
+}
+
 // get theme names from themes object keys
 const themeNames = Object.keys(themes) as [keyof typeof themes];
 

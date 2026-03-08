@@ -179,6 +179,22 @@ test('renderCalendarSvg returns SVG with month labels, weekday labels, and toolt
   assert.doesNotMatch(svg, />Fri<\/text>/);
 });
 
+test('renderCalendarSvg uses prefers-color-scheme CSS when no explicit color scheme is provided', () => {
+  const activities = buildPlotActivities(
+    new Date('2026-01-26T00:00:00Z'),
+    new Date('2026-01-28T00:00:00Z'),
+    makeCountsByDate([['2026-01-27', 7]]),
+  );
+
+  const svg = renderCalendarSvg(activities, undefined, 'corvus', themes);
+
+  assert.match(svg, /class="calendar-root"/);
+  assert.match(svg, /@media \(prefers-color-scheme: dark\)/);
+  assert.match(svg, /--calendar-text-color: #1f2328/);
+  assert.match(svg, /--calendar-text-color: #f0f6fc/);
+  assert.match(svg, /fill="var\(--calendar-level-4\)"/);
+});
+
 test('renderCalendarSvg uses the resolved theme colors for light and dark schemes', () => {
   const activities = buildPlotActivities(
     new Date('2026-01-26T00:00:00Z'),
@@ -189,8 +205,24 @@ test('renderCalendarSvg uses the resolved theme colors for light and dark scheme
   const lightSvg = renderCalendarSvg(activities, 'light', 'corvus', themes);
   const darkSvg = renderCalendarSvg(activities, 'dark', 'corvus', themes);
 
-  assert.match(lightSvg, /fill="#eff2f5"/);
-  assert.match(lightSvg, /fill="#003960"/);
-  assert.match(darkSvg, /fill="#151b23"/);
-  assert.match(darkSvg, /fill="#A5D6E4"/);
+  assert.match(lightSvg, /--calendar-level-0: #eff2f5/);
+  assert.match(lightSvg, /--calendar-level-4: #003960/);
+  assert.match(lightSvg, /color-scheme:light;/);
+  assert.doesNotMatch(lightSvg, /@media \(prefers-color-scheme: dark\)/);
+  assert.match(darkSvg, /--calendar-level-0: #151b23/);
+  assert.match(darkSvg, /--calendar-level-4: #A5D6E4/);
+  assert.match(darkSvg, /color-scheme:dark;/);
+  assert.doesNotMatch(darkSvg, /@media \(prefers-color-scheme: dark\)/);
+});
+
+test('renderRollingYearsSvg falls back to automatic CSS theming for invalid color schemes', async () => {
+  const activities = buildPlotActivities(
+    new Date('2026-01-26T00:00:00Z'),
+    new Date('2026-01-28T00:00:00Z'),
+    makeCountsByDate([['2026-01-27', 7]]),
+  );
+  const svg = renderCalendarSvg(activities, undefined, 'corvus', themes);
+
+  assert.match(svg, /@media \(prefers-color-scheme: dark\)/);
+  assert.match(svg, /color-scheme:light dark;/);
 });

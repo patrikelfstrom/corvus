@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   getInvalidThemeReason,
   parseColorScheme,
+  parseOptionalColorScheme,
   parseThemeName,
 } from './themes.ts';
 
@@ -24,6 +25,12 @@ test('parseThemeName accepts exact configured theme names', () => {
 
 test('parseColorScheme falls back to the default for invalid values', () => {
   assert.equal(parseColorScheme('DARK'), 'light');
+});
+
+test('parseOptionalColorScheme returns undefined for invalid values', () => {
+  assert.equal(parseOptionalColorScheme('DARK'), undefined);
+  assert.equal(parseOptionalColorScheme(undefined), undefined);
+  assert.equal(parseOptionalColorScheme('dark'), 'dark');
 });
 
 test('parseThemeName defaults to corvus when theme query is missing', () => {

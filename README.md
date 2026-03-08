@@ -132,10 +132,7 @@ Custom themes are available in addition to the built-in themes and can still be 
 
 
 #### Dark mode
-Corvus supports dark mode and the calendar will automatically switch between light and dark themes based on the user's system preferences. 
-
-> [!NOTE]  
-> `Sec-CH-Prefers-Color-Scheme` header is currently used for client color scheme detection, but browser support is currently limited.
+Corvus supports dark mode and the calendar will automatically switch between light and dark themes using CSS `prefers-color-scheme` inside the generated SVG. This allows embedded SVGs to follow the surrounding page's color scheme.
 
 ## Environment defaults
 

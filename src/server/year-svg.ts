@@ -4,10 +4,10 @@ import { Window } from 'happy-dom';
 import { loadConfig } from './config.ts';
 import { getDatabase, initDatabaseSchema } from './db/index.ts';
 import {
-  DEFAULT_COLOR_SCHEME,
   DEFAULT_THEME_NAME,
-  parseColorScheme,
+  parseOptionalColorScheme,
   parseThemeName,
+  type Theme,
   type ThemeMap,
 } from './themes.ts';
 
@@ -127,6 +127,41 @@ function createPlotDocument(): Document {
   // Plot is typed against the standard DOM lib, while happy-dom exposes its
   // own compatible classes. Cast once at the integration boundary.
   return new Window().document as unknown as Document;
+}
+
+function createThemeCssVariables(
+  theme: Theme,
+  colorScheme: CalendarColorScheme,
+): string {
+  return [
+    `--calendar-text-color: ${TEXT_COLORS[colorScheme]}`,
+    ...theme[colorScheme].map(
+      (fill, index) => `--calendar-level-${index}: ${fill}`,
+    ),
+  ].join(';');
+}
+
+function appendThemeStyles(
+  svg: SVGElement,
+  document: Document,
+  theme: Theme,
+  colorScheme: CalendarColorScheme | undefined,
+): void {
+  const style = document.createElementNS(SVG_NAMESPACE, 'style');
+  const lightVariables = createThemeCssVariables(theme, 'light');
+  const darkVariables = createThemeCssVariables(theme, 'dark');
+
+  style.setAttribute('type', 'text/css');
+  style.textContent =
+    colorScheme == null
+      ? `.calendar-root{color-scheme:light dark;${lightVariables}}@media (prefers-color-scheme: dark){.calendar-root{${darkVariables}}}`
+      : `.calendar-root{color-scheme:${colorScheme};${createThemeCssVariables(theme, colorScheme)}}`;
+
+  svg.prepend(style);
+}
+
+function getThemeFill(index: number): string {
+  return `var(--calendar-level-${index})`;
 }
 
 export function getFixedWeekWindow(totalWeeks: number): {
@@ -338,7 +373,7 @@ function appendMonthLabels(
 
 export function renderCalendarSvg(
   activities: Array<PlotActivity>,
-  colorScheme: CalendarColorScheme,
+  colorScheme: CalendarColorScheme | undefined,
   theme: CalendarTheme,
   availableThemes: ThemeMap,
 ): string {
@@ -350,9 +385,10 @@ export function renderCalendarSvg(
   }
 
   const document = createPlotDocument();
+  const resolvedColorScheme = colorScheme ?? 'light';
   const weekCount =
     Math.max(...activities.map((activity) => activity.weekIndex)) + 1;
-  const textColor = TEXT_COLORS[colorScheme];
+  const textColor = 'var(--calendar-text-color)';
   const svgWidth = LEFT_MARGIN + RIGHT_MARGIN + weekCount * CELL_STEP;
   const plotHeight =
     TOP_MARGIN + BOTTOM_MARGIN + WEEKDAY_LABELS.length * CELL_STEP;
@@ -386,7 +422,7 @@ export function renderCalendarSvg(
     color: {
       type: 'ordinal',
       domain: [0, 1, 2, 3, 4],
-      range: resolvedTheme[colorScheme],
+      range: Array.from({ length: 5 }, (_, index) => getThemeFill(index)),
       legend: false,
     },
     marks: [
@@ -406,6 +442,7 @@ export function renderCalendarSvg(
 
   svg.setAttribute('xmlns', SVG_NAMESPACE);
   svg.setAttribute('xmlns:xlink', XLINK_NAMESPACE);
+  svg.setAttribute('class', 'calendar-root');
   svg.setAttribute('fill', textColor);
   svg.setAttribute('font-family', FONT_STACK);
   svg.setAttribute('font-size', String(FONT_SIZE));
@@ -416,6 +453,7 @@ export function renderCalendarSvg(
   svg.style.setProperty('font-family', FONT_STACK);
   svg.style.setProperty('font-size', `${FONT_SIZE}px`);
 
+  appendThemeStyles(svg, document, resolvedTheme, colorScheme);
   appendMonthLabels(svg, document, activities, textColor);
   appendWeekdayLabels(svg, document, textColor);
 
@@ -440,7 +478,7 @@ export function renderCalendarSvg(
     LEGEND_LABELS.less,
   );
 
-  resolvedTheme[colorScheme].forEach((fill, index) => {
+  resolvedTheme[resolvedColorScheme].forEach((_fill, index) => {
     const swatch = document.createElementNS(SVG_NAMESPACE, 'rect');
 
     swatch.setAttribute('x', String(legendSwatchStartX + index * CELL_STEP));
@@ -449,7 +487,7 @@ export function renderCalendarSvg(
     swatch.setAttribute('height', '10');
     swatch.setAttribute('rx', String(CELL_RADIUS));
     swatch.setAttribute('ry', String(CELL_RADIUS));
-    swatch.setAttribute('fill', fill);
+    swatch.setAttribute('fill', getThemeFill(index));
     swatch.setAttribute('stroke', CELL_BORDER);
     swatch.setAttribute('stroke-width', String(CELL_BORDER_WIDTH));
     legendGroup.append(swatch);
@@ -474,7 +512,7 @@ export function renderCalendarSvg(
 async function renderDateRangeSvg(
   startDate: Date,
   endDate: Date,
-  colorScheme: CalendarColorScheme,
+  colorScheme: CalendarColorScheme | undefined,
   theme: CalendarTheme,
   availableThemes: ThemeMap,
 ): Promise<string> {
@@ -515,7 +553,7 @@ async function renderDateRangeSvg(
 
 export async function renderRollingYearsSvg(
   years: number,
-  colorScheme: string | undefined = DEFAULT_COLOR_SCHEME,
+  colorScheme: string | undefined,
   theme: CalendarTheme = DEFAULT_THEME_NAME,
 ): Promise<string> {
   if (!Number.isInteger(years) || years < 1) {
@@ -525,7 +563,7 @@ export async function renderRollingYearsSvg(
   const config = loadConfig();
   const availableThemes = config.themes;
   const defaultTheme = parseThemeName(config.theme, availableThemes);
-  const resolvedColorScheme = parseColorScheme(colorScheme);
+  const resolvedColorScheme = parseOptionalColorScheme(colorScheme);
   const resolvedTheme = parseThemeName(theme, availableThemes, defaultTheme);
 
   let start: Date;
