@@ -3,6 +3,7 @@ import type { BitbucketRepositoryFailure } from './commits.ts';
 import {
   createBitbucketRequestQueue,
   fetchAllBitbucketCommits,
+  fetchBitbucketPullRequestContributions,
   parseAuthorRaw,
 } from './index.ts';
 import type { BitbucketCommit } from './types.ts';
@@ -15,6 +16,18 @@ export const providerAdapter = defineProviderAdapter<
   shouldFilterClientSide: () => true,
   createRequestQueue: (username, token) =>
     createBitbucketRequestQueue(username, token),
+  fetchPullRequestContributions: ({
+    blacklist,
+    onFailure,
+    requestQueue,
+    since,
+  }) =>
+    fetchBitbucketPullRequestContributions(
+      requestQueue,
+      blacklist,
+      since,
+      onFailure,
+    ),
   fetchCommits: ({ blacklist, onFailure, requestQueue, since }) =>
     fetchAllBitbucketCommits(requestQueue, onFailure, blacklist, since),
   normaliseCommit: (commit) => {
@@ -24,9 +37,10 @@ export const providerAdapter = defineProviderAdapter<
       author_name: parsedAuthor.name,
       author_email: parsedAuthor.email,
       authored_at: commit.date,
+      message: commit.message,
+      repository_full_name: commit.repository.full_name,
     };
   },
-  extractRepositoryFullName: (commit) => commit.repository.full_name,
   normaliseFailure: (failure) => {
     const targetType =
       failure.target === 'workspaces' || failure.target.startsWith('workspace:')

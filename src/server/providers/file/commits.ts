@@ -5,7 +5,7 @@ import type { DiscoveredGitRepository } from './scan.ts';
 
 const FIELD_SEPARATOR = '\u001f';
 const RECORD_SEPARATOR = '\u001e';
-const GIT_LOG_FORMAT = `%H${FIELD_SEPARATOR}%an${FIELD_SEPARATOR}%ae${FIELD_SEPARATOR}%aI${RECORD_SEPARATOR}`;
+const GIT_LOG_FORMAT = `%H${FIELD_SEPARATOR}%an${FIELD_SEPARATOR}%ae${FIELD_SEPARATOR}%aI${FIELD_SEPARATOR}%B${RECORD_SEPARATOR}`;
 
 export interface LocalRepositoryCommit {
   sha: string;
@@ -13,6 +13,7 @@ export interface LocalRepositoryCommit {
   authorName: string;
   authorEmail: string;
   authoredAt: string;
+  message: string;
 }
 
 export type GitCommandRunner = (
@@ -75,10 +76,8 @@ export function parseGitLogOutput(
       continue;
     }
 
-    const [sha, authorName, authorEmail, authoredAt] = record.split(
-      FIELD_SEPARATOR,
-      4,
-    );
+    const [sha, authorName, authorEmail, authoredAt, message = ''] =
+      record.split(FIELD_SEPARATOR, 5);
 
     if (
       !sha ||
@@ -97,6 +96,7 @@ export function parseGitLogOutput(
       authorName,
       authorEmail,
       authoredAt,
+      message,
     });
   }
 

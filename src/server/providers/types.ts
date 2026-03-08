@@ -1,9 +1,43 @@
+export type ContributionCategory =
+  | 'General'
+  | 'Code review'
+  | 'Commits'
+  | 'Issues'
+  | 'Pull requests';
+
+export type ContributionType =
+  | 'repository.created'
+  | 'repository.forked'
+  | 'discussion.opened'
+  | 'discussion.answered'
+  | 'issue.opened'
+  | 'pull_request.opened'
+  | 'code_review.submitted'
+  | 'code_review.inline_comment'
+  | 'commit.authored';
+
 export interface NormalisedCommit {
   sha: string;
   author_name: string;
   author_email: string;
   authored_at: string;
+  message: string;
+  repository_full_name: string | null;
 }
+
+export interface NormalisedContribution {
+  category: ContributionCategory;
+  contributionType: ContributionType;
+  occurredAt: string;
+  dedupeKeyInput: string;
+}
+
+export type SyncStream =
+  | 'commits'
+  | 'general'
+  | 'issues'
+  | 'pull_requests'
+  | 'code_reviews';
 
 export type SyncFailureTargetType =
   | 'repository'
@@ -36,11 +70,22 @@ export interface ProviderAdapter<TCommit, TFailure, TRequestQueue> {
   shouldFilterClientSide(additionalMatchers: Array<string>): boolean;
   createRequestQueue(username: string, token: string): TRequestQueue;
   resolveApiBaseUrl?(url?: string): string;
+  fetchGeneralContributions?(
+    context: ProviderFetchContext<TFailure, TRequestQueue>,
+  ): Promise<Array<NormalisedContribution>>;
+  fetchIssueContributions?(
+    context: ProviderFetchContext<TFailure, TRequestQueue>,
+  ): Promise<Array<NormalisedContribution>>;
+  fetchPullRequestContributions?(
+    context: ProviderFetchContext<TFailure, TRequestQueue>,
+  ): Promise<Array<NormalisedContribution>>;
+  fetchCodeReviewContributions?(
+    context: ProviderFetchContext<TFailure, TRequestQueue>,
+  ): Promise<Array<NormalisedContribution>>;
   fetchCommits(
     context: ProviderFetchContext<TFailure, TRequestQueue>,
   ): Promise<Array<TCommit>>;
   normaliseCommit(commit: TCommit): NormalisedCommit;
-  extractRepositoryFullName(commit: TCommit): string | null;
   normaliseFailure(failure: TFailure): ProviderFailure;
 }
 

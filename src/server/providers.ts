@@ -7,36 +7,36 @@ import { loadProviderAdapter, type Provider } from './providers/config.ts';
 import type { ProviderFetchOptions } from './providers/kernel/manifest-types.ts';
 import type {
   NormalisedCommit,
+  NormalisedContribution,
   ProviderFailure,
-  SyncFailureTargetType,
+  SyncStream,
 } from './providers/types.ts';
 
-export type { NormalisedCommit, Provider, SyncFailureTargetType };
+export type { Provider } from './providers/config.ts';
+export type {
+  ContributionCategory,
+  ContributionType,
+  NormalisedCommit,
+  NormalisedContribution,
+  SyncFailureTargetType,
+  SyncStream,
+} from './providers/types.ts';
 
 export interface SyncFetchFailure extends ProviderFailure {
   provider: Provider;
 }
 
-export interface FetchCommitsForProviderResult {
-  repositoriesSynced: number;
-  commits: Array<NormalisedCommit>;
-  failures: Array<SyncFetchFailure>;
-}
-
-export interface FetchCommitsForProviderOptions {
+export interface FetchContributionStreamForProviderOptions {
   provider: Provider;
   fetchOptions: ProviderFetchOptions;
+  stream: SyncStream;
   since?: string;
 }
 
-function countUniqueStrings(values: Array<string>): number {
-  const nonEmpty = values.map((value) => value.trim()).filter((value) => value);
-  return new Set(nonEmpty).size;
-}
-
-interface NormalisedCommitEntry {
-  commit: NormalisedCommit;
-  repositoryFullName: string | null;
+export interface FetchContributionStreamForProviderResult {
+  contributions: Array<NormalisedContribution>;
+  failures: Array<SyncFetchFailure>;
+  supported: boolean;
 }
 
 function getAdditionalMatchers(
@@ -49,33 +49,54 @@ function getAdditionalMatchers(
   });
 }
 
-function filterCommitsByIdentity(
-  entries: Array<NormalisedCommitEntry>,
+function buildCommitContributions(
+  commits: Array<NormalisedCommit>,
   username: string,
   additionalMatchers: Array<string>,
-): Array<NormalisedCommitEntry> {
+): Array<NormalisedContribution> {
   const identityMatchers = normalizeIdentityMatchers([
     username,
     ...additionalMatchers,
   ]);
+  const contributions: Array<NormalisedContribution> = [];
 
-  return entries.filter(({ commit }) =>
-    commitMatchesIdentity(
+  for (const commit of commits) {
+    const authored = commitMatchesIdentity(
       commit.author_name,
       commit.author_email,
       identityMatchers,
-    ),
-  );
+    );
+
+    if (!authored) {
+      continue;
+    }
+
+    contributions.push({
+      category: 'Commits',
+      contributionType: 'commit.authored',
+      occurredAt: commit.authored_at,
+      dedupeKeyInput: commit.sha,
+    });
+  }
+
+  return contributions;
 }
 
-/**
- * Fetch commits for a given provider integration and return them in a
- * normalised shape ready for persistence.
- */
-export async function fetchCommitsForProvider(
-  options: FetchCommitsForProviderOptions,
-): Promise<FetchCommitsForProviderResult> {
-  const { provider, fetchOptions, since } = options;
+function normaliseFailures(
+  provider: Provider,
+  failures: Array<unknown>,
+  normalizeFailure: (failure: unknown) => ProviderFailure,
+): Array<SyncFetchFailure> {
+  return failures.map((failure) => ({
+    provider,
+    ...normalizeFailure(failure),
+  }));
+}
+
+export async function fetchContributionStreamForProvider(
+  options: FetchContributionStreamForProviderOptions,
+): Promise<FetchContributionStreamForProviderResult> {
+  const { provider, fetchOptions, stream, since } = options;
   const {
     username,
     token,
@@ -88,15 +109,9 @@ export async function fetchCommitsForProvider(
   const additionalMatchers = getAdditionalMatchers(username, matchAuthor);
   const adapter = await loadProviderAdapter(provider);
   const apiBaseUrl = adapter.resolveApiBaseUrl?.(url);
-
-  logger.info(
-    { provider, username, apiBaseUrl, path, depth },
-    'Starting provider commit fetch',
-  );
-
   const requestQueue = adapter.createRequestQueue(username, token ?? '');
   const rawFailures: Array<unknown> = [];
-  const rawCommits = await adapter.fetchCommits({
+  const context = {
     requestQueue,
     username,
     additionalMatchers,
@@ -105,42 +120,69 @@ export async function fetchCommitsForProvider(
     apiBaseUrl,
     path,
     depth,
-    onFailure: (failure) => {
+    onFailure: (failure: unknown) => {
       rawFailures.push(failure);
     },
-  });
-
-  const normalisedCommitEntries = rawCommits.map((commit) => ({
-    commit: adapter.normaliseCommit(commit),
-    repositoryFullName: adapter.extractRepositoryFullName(commit),
-  }));
-  const matchingCommitEntries = adapter.shouldFilterClientSide(
-    additionalMatchers,
-  )
-    ? filterCommitsByIdentity(
-        normalisedCommitEntries,
-        username,
-        additionalMatchers,
-      )
-    : normalisedCommitEntries;
-  const matchingCommits = matchingCommitEntries.map(({ commit }) => commit);
-  const failures = rawFailures.map((failure) => ({
-    provider,
-    ...adapter.normaliseFailure(failure),
-  }));
+  };
 
   logger.info(
-    { provider, totalCommits: matchingCommits.length },
-    'Provider commit fetch complete',
+    { provider, stream, username, apiBaseUrl, path, depth },
+    'Starting provider contribution fetch',
+  );
+
+  let contributions: Array<NormalisedContribution> = [];
+  let supported = true;
+
+  if (stream === 'commits') {
+    const rawCommits = await adapter.fetchCommits(context);
+    const normalisedCommits = rawCommits.map((commit) =>
+      adapter.normaliseCommit(commit),
+    );
+    contributions = buildCommitContributions(
+      normalisedCommits,
+      username,
+      additionalMatchers,
+    );
+  } else if (stream === 'general') {
+    contributions = adapter.fetchGeneralContributions
+      ? await adapter.fetchGeneralContributions(context)
+      : [];
+    supported = adapter.fetchGeneralContributions != null;
+  } else if (stream === 'issues') {
+    contributions = adapter.fetchIssueContributions
+      ? await adapter.fetchIssueContributions(context)
+      : [];
+    supported = adapter.fetchIssueContributions != null;
+  } else if (stream === 'pull_requests') {
+    contributions = adapter.fetchPullRequestContributions
+      ? await adapter.fetchPullRequestContributions(context)
+      : [];
+    supported = adapter.fetchPullRequestContributions != null;
+  } else {
+    contributions = adapter.fetchCodeReviewContributions
+      ? await adapter.fetchCodeReviewContributions(context)
+      : [];
+    supported = adapter.fetchCodeReviewContributions != null;
+  }
+
+  const failures = normaliseFailures(provider, rawFailures, (failure) =>
+    adapter.normaliseFailure(failure),
+  );
+
+  logger.info(
+    {
+      provider,
+      stream,
+      totalContributions: contributions.length,
+      failuresCaptured: failures.length,
+      supported,
+    },
+    'Provider contribution fetch complete',
   );
 
   return {
-    repositoriesSynced: countUniqueStrings(
-      matchingCommitEntries.map(
-        (commitEntry) => commitEntry.repositoryFullName ?? '',
-      ),
-    ),
-    commits: matchingCommits,
+    contributions,
     failures,
+    supported,
   };
 }

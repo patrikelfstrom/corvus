@@ -4,6 +4,8 @@ import type { GiteaRepositoryFailure } from './commits.ts';
 import {
   createGiteaRequestQueue,
   fetchAllGiteaCommits,
+  fetchGiteaIssueContributions,
+  fetchGiteaPullRequestContributions,
   resolveGiteaApiBaseUrl,
 } from './index.ts';
 import type { GiteaCommitItem } from './types.ts';
@@ -30,6 +32,25 @@ export function createGiteaCompatibleProviderAdapter(
       additionalMatchers.length > 0,
     resolveApiBaseUrl,
     createRequestQueue: (_username, token) => createRequestQueue(token),
+    fetchIssueContributions: ({ apiBaseUrl, blacklist, requestQueue, since }) =>
+      fetchGiteaIssueContributions(
+        requestQueue,
+        requireResolvedApiBaseUrl(apiBaseUrl, provider),
+        blacklist,
+        since,
+      ),
+    fetchPullRequestContributions: ({
+      apiBaseUrl,
+      blacklist,
+      requestQueue,
+      since,
+    }) =>
+      fetchGiteaPullRequestContributions(
+        requestQueue,
+        requireResolvedApiBaseUrl(apiBaseUrl, provider),
+        blacklist,
+        since,
+      ),
     fetchCommits: ({
       additionalMatchers,
       apiBaseUrl,
@@ -56,8 +77,9 @@ export function createGiteaCompatibleProviderAdapter(
       author_name: commit.commit.author?.name ?? '',
       author_email: commit.commit.author?.email ?? '',
       authored_at: commit.commit.author?.date ?? '',
+      message: commit.commit.message,
+      repository_full_name: commit.repository.full_name,
     }),
-    extractRepositoryFullName: (commit) => commit.repository.full_name,
     normaliseFailure: (failure) => ({
       targetType: 'repository',
       targetName: failure.repositoryFullName,

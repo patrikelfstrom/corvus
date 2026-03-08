@@ -93,7 +93,8 @@ export const providerAdapter = defineProviderAdapter<
     author_name: commit.authorName,
     author_email: commit.authorEmail,
     authored_at: commit.authoredAt,
+    message: commit.message,
+    repository_full_name: commit.repositoryFullName,
   }),
-  extractRepositoryFullName: (commit) => commit.repositoryFullName,
   normaliseFailure: (failure) => failure,
 });

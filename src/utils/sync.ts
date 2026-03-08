@@ -1,21 +1,32 @@
 import { loadIntegrationsFromConfig } from '../server/integrations-config.ts';
 import { logger } from '../server/logger.ts';
 import type { ResolvedIntegration } from '../server/providers/index.ts';
-import type { Provider, SyncFetchFailure } from '../server/providers.ts';
-import { fetchCommitsForProvider } from '../server/providers.ts';
+import type {
+  Provider,
+  SyncFetchFailure,
+  SyncStream,
+} from '../server/providers.ts';
+import { fetchContributionStreamForProvider } from '../server/providers.ts';
 import { parseSyncFailureError } from '../server/sync-failure.ts';
 import { resolveRequestedIntegrations } from './sync-selection.ts';
 import {
   ensureSyncDatabaseSchema,
   fetchIntegrationLastSuccessfulSyncStartedAt,
-  persistCommits,
+  persistContributions,
+  persistIntegrationSyncCheckpoint,
   persistIntegrationSyncRun,
 } from './sync-store.ts';
 
+const SYNC_STREAMS = [
+  'commits',
+  'issues',
+  'pull_requests',
+] as const satisfies ReadonlyArray<SyncStream>;
+
 interface SyncResult {
   username: string;
-  repositoriesSynced: number;
-  commitsFetched: number;
+  contributionsFetched: number;
+  contributionsStored: number;
   commitsStored: number;
   failuresCaptured: number;
   failures: Array<SyncFetchFailure>;
@@ -34,8 +45,8 @@ interface IntegrationSyncRun {
   integrationId: string;
   provider: Provider;
   username: string;
-  repositoriesSynced: number;
-  commitsFetched: number;
+  contributionsFetched: number;
+  contributionsStored: number;
   commitsStored: number;
   failuresCaptured: number;
   failures: Array<SyncFetchFailure>;
@@ -76,8 +87,8 @@ interface IntegrationCompletedProgressEvent {
   integrationId: string;
   provider: Provider;
   username: string;
-  repositoriesSynced: number;
-  commitsFetched: number;
+  contributionsFetched: number;
+  contributionsStored: number;
   commitsStored: number;
   failuresCaptured: number;
   error: string | null;
@@ -137,11 +148,13 @@ async function runIntegrationSync(
 ): Promise<RunIntegrationSyncResult> {
   await ensureSyncDatabaseSchema();
   const integrationId = integration.id;
-  const syncStartedAt = new Date();
-  const syncStartedAtIso = syncStartedAt.toISOString();
+  const { provider, fetchOptions } = integration;
+  const failures: Array<SyncFetchFailure> = [];
+  let contributionsFetched = 0;
+  let contributionsStored = 0;
+  let commitsStored = 0;
 
   try {
-    const { provider, fetchOptions } = integration;
     const {
       username,
       match_author: matchAuthor,
@@ -150,12 +163,6 @@ async function runIntegrationSync(
       path,
       depth,
     } = fetchOptions;
-
-    // Cursor policy is intentionally success-only: partial sync failures do not
-    // advance the since cursor for the next partial run.
-    const lastSyncStartedAt = options.ignoreDateScope
-      ? null
-      : await fetchIntegrationLastSuccessfulSyncStartedAt(integrationId);
 
     logger.info(
       {
@@ -171,50 +178,102 @@ async function runIntegrationSync(
         ),
         blacklistMatchers: blacklist.length,
         ignoreDateScope: options.ignoreDateScope === true,
-        lastSyncStartedAt,
       },
-      'Starting commit sync',
+      'Starting contribution sync',
     );
 
-    const { repositoriesSynced, commits, failures } =
-      await fetchCommitsForProvider({
-        provider,
-        fetchOptions,
-        since: lastSyncStartedAt ?? undefined,
-      });
+    for (const stream of SYNC_STREAMS) {
+      const lastSyncStartedAt = options.ignoreDateScope
+        ? null
+        : await fetchIntegrationLastSuccessfulSyncStartedAt(
+            integrationId,
+            stream,
+          );
+      const streamStartedAtIso = new Date().toISOString();
 
-    logger.info(
-      {
-        integrationId,
-        repositoriesSynced,
-        commitsFetched: commits.length,
-        failuresCaptured: failures.length,
-      },
-      'Persisting sync results to database',
-    );
+      logger.info(
+        {
+          integrationId,
+          provider,
+          stream,
+          username,
+          lastSyncStartedAt,
+        },
+        'Starting contribution stream sync',
+      );
 
-    const stored = await persistCommits(commits);
+      try {
+        const streamResult = await fetchContributionStreamForProvider({
+          provider,
+          fetchOptions,
+          stream,
+          since: lastSyncStartedAt ?? undefined,
+        });
 
-    await persistIntegrationSyncRun(
-      integrationId,
-      syncStartedAtIso,
-      new Date().toISOString(),
-      repositoriesSynced,
-      commits.length,
-      failures.length,
-    );
+        if (!streamResult.supported) {
+          logger.info(
+            {
+              integrationId,
+              provider,
+              stream,
+            },
+            'Skipping unsupported contribution stream',
+          );
+          continue;
+        }
 
-    logger.info(
-      {
-        integrationId,
-        username,
-        repositoriesSynced,
-        commitsFetched: commits.length,
-        commitsStored: stored,
-        failuresCaptured: failures.length,
-      },
-      'Sync complete',
-    );
+        const persisted = await persistContributions(
+          integrationId,
+          provider,
+          streamResult.contributions,
+        );
+
+        contributionsFetched += streamResult.contributions.length;
+        contributionsStored += persisted.contributionsStored;
+        commitsStored += persisted.commitsStored;
+        failures.push(...streamResult.failures);
+
+        await persistIntegrationSyncRun(
+          integrationId,
+          stream,
+          streamStartedAtIso,
+          new Date().toISOString(),
+          streamResult.contributions.length,
+          persisted.contributionsStored,
+          streamResult.failures.length,
+        );
+
+        if (streamResult.failures.length === 0) {
+          await persistIntegrationSyncCheckpoint(
+            integrationId,
+            stream,
+            streamStartedAtIso,
+          );
+        }
+      } catch (error) {
+        const parsedError = parseSyncFailureError(error);
+        const failure: SyncFetchFailure = {
+          provider,
+          targetType: 'sync',
+          targetName: stream,
+          repositoryFullName: null,
+          commitHash: parsedError.commitHash,
+          statusCode: parsedError.statusCode,
+          message: parsedError.message,
+        };
+        failures.push(failure);
+
+        await persistIntegrationSyncRun(
+          integrationId,
+          stream,
+          streamStartedAtIso,
+          new Date().toISOString(),
+          0,
+          0,
+          1,
+        );
+      }
+    }
 
     const partialFailureError = createPartialFailureErrorMessage(
       provider,
@@ -225,24 +284,23 @@ async function runIntegrationSync(
         {
           integrationId,
           provider,
-          username,
-          cursorPolicy: 'success-only',
+          username: fetchOptions.username,
           failuresCaptured: failures.length,
           sampleFailure: failures[0]?.message,
           sampleFailureTargetType: failures[0]?.targetType,
           sampleFailureTargetName: failures[0]?.targetName,
         },
-        'Sync completed with provider-level fetch failures; partial sync cursor remains unchanged until a zero-failure run',
+        'Contribution sync completed with provider-level fetch failures',
       );
     }
 
     return {
       error: partialFailureError,
       result: {
-        username,
-        repositoriesSynced,
-        commitsFetched: commits.length,
-        commitsStored: stored,
+        username: fetchOptions.username,
+        contributionsFetched,
+        contributionsStored,
+        commitsStored,
         failuresCaptured: failures.length,
         failures,
       },
@@ -250,24 +308,19 @@ async function runIntegrationSync(
   } catch (error) {
     logger.error(
       { integrationId, err: error },
-      'Commit sync failed unexpectedly',
-    );
-
-    const parsedError = parseSyncFailureError(error);
-    const message = parsedError.message;
-
-    await persistIntegrationSyncRun(
-      integrationId,
-      syncStartedAtIso,
-      new Date().toISOString(),
-      0,
-      0,
-      1,
+      'Contribution sync failed unexpectedly',
     );
 
     return {
-      error: message,
-      result: null,
+      error: parseSyncFailureError(error).message,
+      result: {
+        username: fetchOptions.username,
+        contributionsFetched,
+        contributionsStored,
+        commitsStored,
+        failuresCaptured: failures.length,
+        failures,
+      },
     };
   }
 }
@@ -299,14 +352,6 @@ export async function runConfiguredIntegrationsSyncs(
   });
 
   for (const integration of integrations) {
-    logger.trace(
-      {
-        integrationId: integration.id,
-        provider: integration.provider,
-        username: integration.fetchOptions.username,
-      },
-      'Running sync for integration',
-    );
     await reportSyncProgress(onProgress, {
       type: 'integration-started',
       integrationId: integration.id,
@@ -320,26 +365,14 @@ export async function runConfiguredIntegrationsSyncs(
       integrationId: integration.id,
       provider: integration.provider,
       username: integration.fetchOptions.username,
-      repositoriesSynced: syncResponse.result?.repositoriesSynced ?? 0,
-      commitsFetched: syncResponse.result?.commitsFetched ?? 0,
+      contributionsFetched: syncResponse.result?.contributionsFetched ?? 0,
+      contributionsStored: syncResponse.result?.contributionsStored ?? 0,
       commitsStored: syncResponse.result?.commitsStored ?? 0,
       failuresCaptured: syncResponse.result?.failuresCaptured ?? 0,
       failures: syncResponse.result?.failures ?? [],
       error: syncResponse.error,
     } satisfies IntegrationSyncRun;
     runs.push(run);
-
-    logger.trace(
-      {
-        integrationId: integration.id,
-        repositoriesSynced: syncResponse.result?.repositoriesSynced ?? 0,
-        commitsFetched: syncResponse.result?.commitsFetched ?? 0,
-        commitsStored: syncResponse.result?.commitsStored ?? 0,
-        failuresCaptured: syncResponse.result?.failuresCaptured ?? 0,
-        hadError: syncResponse.error !== null,
-      },
-      'Finished sync for integration',
-    );
 
     for (const failure of run.failures) {
       await reportSyncProgress(onProgress, {
@@ -356,8 +389,8 @@ export async function runConfiguredIntegrationsSyncs(
       integrationId: run.integrationId,
       provider: run.provider,
       username: run.username,
-      repositoriesSynced: run.repositoriesSynced,
-      commitsFetched: run.commitsFetched,
+      contributionsFetched: run.contributionsFetched,
+      contributionsStored: run.contributionsStored,
       commitsStored: run.commitsStored,
       failuresCaptured: run.failuresCaptured,
       error: run.error,

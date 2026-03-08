@@ -1,8 +1,9 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { readEnv } from '../env.ts';
 
-const DEFAULT_DB_FILE = 'commits.sqlite';
+const DEFAULT_DB_FILE = 'database.sqlite';
+const LEGACY_DB_FILE = 'commits.sqlite';
 const PROJECT_ROOT = process.cwd();
 
 function isSpecialSqlitePath(dbPath: string): boolean {
@@ -39,6 +40,17 @@ export function ensureWritableSqlitePath(
 
   if (!isSpecialSqlitePath(dbPath)) {
     mkdirSync(path.dirname(dbPath), { recursive: true });
+
+    if (!isLikelySqliteFilePath(configuredPath)) {
+      const absoluteDirectory = path.isAbsolute(configuredPath)
+        ? configuredPath
+        : path.join(PROJECT_ROOT, configuredPath);
+      const legacyDbPath = path.join(absoluteDirectory, LEGACY_DB_FILE);
+
+      if (!existsSync(dbPath) && existsSync(legacyDbPath)) {
+        renameSync(legacyDbPath, dbPath);
+      }
+    }
   }
 
   return dbPath;

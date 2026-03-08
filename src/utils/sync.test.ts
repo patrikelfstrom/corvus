@@ -175,9 +175,9 @@ test('runConfiguredIntegrationsSyncs counts partial provider failures as failed 
           error: null,
           result: {
             username: integration.fetchOptions.username,
-            repositoriesSynced: 2,
-            commitsFetched: 6,
-            commitsStored: 6,
+            contributionsFetched: 6,
+            contributionsStored: 6,
+            commitsStored: 4,
             failuresCaptured: 0,
             failures: [],
           },
@@ -189,9 +189,9 @@ test('runConfiguredIntegrationsSyncs counts partial provider failures as failed 
           error: 'Encountered 2 github fetch failures',
           result: {
             username: integration.fetchOptions.username,
-            repositoriesSynced: 3,
-            commitsFetched: 10,
-            commitsStored: 8,
+            contributionsFetched: 10,
+            contributionsStored: 8,
+            commitsStored: 5,
             failuresCaptured: 2,
             failures: [
               {
@@ -233,9 +233,9 @@ test('runConfiguredIntegrationsSyncs counts partial provider failures as failed 
         integrationId: 'healthy',
         provider: 'github',
         username: 'healthy-user',
-        repositoriesSynced: 2,
-        commitsFetched: 6,
-        commitsStored: 6,
+        contributionsFetched: 6,
+        contributionsStored: 6,
+        commitsStored: 4,
         failuresCaptured: 0,
         failures: [],
         error: null,
@@ -244,9 +244,9 @@ test('runConfiguredIntegrationsSyncs counts partial provider failures as failed 
         integrationId: 'partial-failure',
         provider: 'github',
         username: 'partial-failure-user',
-        repositoriesSynced: 3,
-        commitsFetched: 10,
-        commitsStored: 8,
+        contributionsFetched: 10,
+        contributionsStored: 8,
+        commitsStored: 5,
         failuresCaptured: 2,
         failures: [
           {
@@ -291,9 +291,9 @@ test('runConfiguredIntegrationsSyncs emits progress events while syncing', async
           error: null,
           result: {
             username: integration.fetchOptions.username,
-            repositoriesSynced: 2,
-            commitsFetched: 6,
-            commitsStored: 6,
+            contributionsFetched: 6,
+            contributionsStored: 6,
+            commitsStored: 4,
             failuresCaptured: 0,
             failures: [],
           },
@@ -304,9 +304,9 @@ test('runConfiguredIntegrationsSyncs emits progress events while syncing', async
         error: 'Encountered 1 github fetch failure',
         result: {
           username: integration.fetchOptions.username,
-          repositoriesSynced: 1,
-          commitsFetched: 3,
-          commitsStored: 2,
+          contributionsFetched: 3,
+          contributionsStored: 2,
+          commitsStored: 1,
           failuresCaptured: 1,
           failures: [
             {
@@ -357,9 +357,9 @@ test('runConfiguredIntegrationsSyncs forwards ignoreDateScope to each integratio
         error: null,
         result: {
           username: integration.fetchOptions.username,
-          repositoriesSynced: 1,
-          commitsFetched: 2,
-          commitsStored: 2,
+          contributionsFetched: 2,
+          contributionsStored: 2,
+          commitsStored: 1,
           failuresCaptured: 0,
           failures: [],
         },

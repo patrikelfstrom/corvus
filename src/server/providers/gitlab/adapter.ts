@@ -3,6 +3,8 @@ import type { GitLabProjectFailure } from './commits.ts';
 import {
   createGitLabRequestQueue,
   fetchAllGitLabCommits,
+  fetchGitLabIssueContributions,
+  fetchGitLabPullRequestContributions,
   resolveGitLabApiBaseUrl,
 } from './index.ts';
 import type { GitLabCommitWithRepository } from './types.ts';
@@ -15,6 +17,34 @@ export const providerAdapter = defineProviderAdapter<
   shouldFilterClientSide: () => false,
   resolveApiBaseUrl: resolveGitLabApiBaseUrl,
   createRequestQueue: (_username, token) => createGitLabRequestQueue(token),
+  fetchIssueContributions: ({
+    apiBaseUrl,
+    blacklist,
+    requestQueue,
+    since,
+    username,
+  }) =>
+    fetchGitLabIssueContributions(
+      requestQueue,
+      requireResolvedApiBaseUrl(apiBaseUrl, 'gitlab'),
+      username,
+      blacklist,
+      since,
+    ),
+  fetchPullRequestContributions: ({
+    apiBaseUrl,
+    blacklist,
+    requestQueue,
+    since,
+    username,
+  }) =>
+    fetchGitLabPullRequestContributions(
+      requestQueue,
+      requireResolvedApiBaseUrl(apiBaseUrl, 'gitlab'),
+      username,
+      blacklist,
+      since,
+    ),
   fetchCommits: ({
     additionalMatchers,
     apiBaseUrl,
@@ -38,8 +68,9 @@ export const providerAdapter = defineProviderAdapter<
     author_name: commit.author_name,
     author_email: commit.author_email,
     authored_at: commit.authored_date,
+    message: commit.message,
+    repository_full_name: commit.repository.full_name,
   }),
-  extractRepositoryFullName: (commit) => commit.repository.full_name,
   normaliseFailure: (failure) => ({
     targetType: 'project',
     targetName: failure.projectPath,
