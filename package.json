@@ -1,6 +1,6 @@
 {
   "name": "corvus",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Sync commits from multiple Git providers and serve a contribution calendar.",
   "author": "Patrik Elfström <me@patrikelfstrom.se>",
   "repository": {
