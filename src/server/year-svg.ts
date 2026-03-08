@@ -1,7 +1,6 @@
-import { cloneElement, createElement } from 'react';
-import type { Activity, DayName } from 'react-activity-calendar';
-import { ActivityCalendar } from 'react-activity-calendar';
-import { renderToStaticMarkup } from 'react-dom/server';
+import * as Plot from '@observablehq/plot';
+import { utcMonth } from 'd3';
+import { JSDOM } from 'jsdom';
 import { loadConfig } from './config.ts';
 import { getDatabase, initDatabaseSchema } from './db/index.ts';
 import {
@@ -22,27 +21,68 @@ type SQLResult<T> = {
   rows?: T[] | undefined;
   success?: boolean | undefined;
 };
+
 interface ActivityPoint {
   date: string;
   count: number;
 }
 
+type PlotBandScale = {
+  apply: (value: number) => number;
+  bandwidth: number;
+};
+
+type PlotSvgElement = SVGSVGElement & {
+  scale: (name: string) => PlotBandScale | undefined;
+};
+
+export interface PlotActivity {
+  date: string;
+  count: number;
+  level: number;
+  weekIndex: number;
+  weekdayIndex: number;
+  weekdayLabel: string;
+  monthTick: boolean;
+}
+
 const EMPTY_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="40"></svg>';
 
-const WEEKDAY_LABELS: Array<DayName> = ['tue', 'thu', 'sat'];
-const SVG_TEXT_STYLE = `<style><![CDATA[
-  text {
-    font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
-    font-size: 12px;
-
-    color: #f0f6fc;
-
-    @media (prefers-color-scheme: light) {
-      color: #1f2328;
-    }
-  }
-]]></style>`;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const CELL_STEP = 13;
+const CELL_INSET = 1.5;
+const CELL_RADIUS = 2;
+const CELL_BORDER = 'rgba(31, 35, 40, 0.05)';
+const CELL_BORDER_WIDTH = 0.5;
+const LEFT_MARGIN = 28;
+const RIGHT_MARGIN = 0;
+const TOP_MARGIN = 15;
+const BOTTOM_MARGIN = 8;
+const LABEL_GAP = 5;
+const LEGEND_HEIGHT = 28;
+const LEGEND_LABEL_GAP = 4;
+const LEGEND_RIGHT_PADDING = 16;
+const LEGEND_LABEL_WIDTH = 28;
+const FONT_SIZE = 12;
+const LEGEND_LABELS = {
+  less: 'Less',
+  more: 'More',
+} as const;
+const FONT_STACK =
+  '-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif';
+const TEXT_COLORS: Record<CalendarColorScheme, string> = {
+  light: '#1f2328',
+  dark: '#f0f6fc',
+};
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const VISIBLE_WEEKDAY_INDICES = new Set([1, 3, 5]);
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink';
+const monthFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  timeZone: 'UTC',
+});
 
 function addUtcDays(value: Date, days: number): Date {
   const next = new Date(value);
@@ -60,6 +100,17 @@ function toUtcDateOnly(value: Date): Date {
   );
 }
 
+function getMondayFirstWeekdayIndex(value: Date): number {
+  return (value.getUTCDay() + 6) % 7;
+}
+
+function getUtcDayDifference(startDate: Date, endDate: Date): number {
+  return Math.round(
+    (toUtcDateOnly(endDate).getTime() - toUtcDateOnly(startDate).getTime()) /
+      DAY_IN_MS,
+  );
+}
+
 function subtractUtcYears(value: Date, years: number): Date {
   const source = toUtcDateOnly(value);
   const targetYear = source.getUTCFullYear() - years;
@@ -72,12 +123,15 @@ function subtractUtcYears(value: Date, years: number): Date {
   return new Date(Date.UTC(targetYear, targetMonth, clampedDay));
 }
 
-function getFixedWeekWindow(totalWeeks: number): { start: Date; end: Date } {
+export function getFixedWeekWindow(totalWeeks: number): {
+  start: Date;
+  end: Date;
+} {
   const weeks = Math.max(1, totalWeeks);
   const totalDays = weeks * 7;
 
   const todayUtc = toUtcDateOnly(new Date());
-  const daysSinceMonday = (todayUtc.getUTCDay() + 6) % 7;
+  const daysSinceMonday = getMondayFirstWeekdayIndex(todayUtc);
 
   const currentWeekMonday = new Date(todayUtc);
   currentWeekMonday.setUTCDate(todayUtc.getUTCDate() - daysSinceMonday);
@@ -112,7 +166,6 @@ async function fetchCountsByDateRange(
   `;
 
   const rows = result.rows ?? [];
-
   const countsByDate = new Map<string, number>();
 
   for (const row of rows) {
@@ -122,7 +175,7 @@ async function fetchCountsByDateRange(
   return countsByDate;
 }
 
-function getActivityLevel(count: number): number {
+export function getActivityLevel(count: number): number {
   if (count <= 0) {
     return 0;
   }
@@ -138,65 +191,151 @@ function getActivityLevel(count: number): number {
   return 4;
 }
 
-function buildActivities(
+export function buildPlotActivities(
   startDate: Date,
   endDate: Date,
   countsByDate: Map<string, number>,
-): Array<Activity> {
-  const activities: Array<Activity> = [];
+): Array<PlotActivity> {
+  const normalizedStartDate = toUtcDateOnly(startDate);
+  const normalizedEndDate = toUtcDateOnly(endDate);
+  const start =
+    normalizedStartDate <= normalizedEndDate
+      ? normalizedStartDate
+      : normalizedEndDate;
+  const end =
+    normalizedStartDate <= normalizedEndDate
+      ? normalizedEndDate
+      : normalizedStartDate;
+  const calendarStart = addUtcDays(start, -getMondayFirstWeekdayIndex(start));
+
+  const activities: Array<PlotActivity> = [];
 
   for (
-    let currentDate = startDate;
-    currentDate <= endDate;
+    let currentDate = start;
+    currentDate <= end;
     currentDate = addUtcDays(currentDate, 1)
   ) {
     const date = toIsoDate(currentDate);
     const count = countsByDate.get(date) ?? 0;
+    const previousActivity = activities[activities.length - 1];
+    const weekdayIndex = getMondayFirstWeekdayIndex(currentDate);
 
     activities.push({
       date,
       count,
       level: getActivityLevel(count),
+      weekIndex: Math.floor(
+        getUtcDayDifference(calendarStart, currentDate) / 7,
+      ),
+      weekdayIndex,
+      weekdayLabel: WEEKDAY_LABELS[weekdayIndex] ?? '',
+      monthTick:
+        previousActivity == null ||
+        previousActivity.date.slice(0, 7) !== date.slice(0, 7),
     });
   }
 
   return activities;
 }
 
-function extractCalendarSvg(markup: string): string | null {
-  const match = markup.match(/<svg[\s\S]*?<\/svg>/);
-  return match ? match[0] : null;
-}
+function appendSvgText(
+  document: Document,
+  parent: SVGElement,
+  attributes: Record<string, string>,
+  content: string,
+): void {
+  const text = document.createElementNS(SVG_NAMESPACE, 'text');
 
-function toStandaloneSvg(svg: string): string {
-  const hasXmlNs = /<svg[^>]*\sxmlns=/.test(svg);
-  const withNamespace = hasXmlNs
-    ? svg
-    : svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-
-  const widthMatch = withNamespace.match(/\swidth="([^"]+)"/);
-  const heightMatch = withNamespace.match(/\sheight="([^"]+)"/);
-
-  if (!widthMatch || !heightMatch) {
-    return withNamespace.replace(/(<svg[^>]*>)/, `$1${SVG_TEXT_STYLE}`);
+  for (const [name, value] of Object.entries(attributes)) {
+    text.setAttribute(name, value);
   }
 
-  const background = `<rect x="0" y="0" width="${widthMatch[1]}" height="${heightMatch[1]}" fill="none"/>`;
-  return withNamespace.replace(
-    /(<svg[^>]*>)/,
-    `$1${SVG_TEXT_STYLE}${background}`,
-  );
+  text.textContent = content;
+  parent.append(text);
 }
 
-function renderCalendarSvg(
-  startDate: Date,
-  endDate: Date,
-  countsByDate: Map<string, number>,
+function appendWeekdayLabels(
+  svg: PlotSvgElement,
+  document: Document,
+  textColor: string,
+): void {
+  const yScale = svg.scale('y');
+
+  if (!yScale) {
+    return;
+  }
+
+  const labelsGroup = document.createElementNS(SVG_NAMESPACE, 'g');
+  labelsGroup.setAttribute('aria-label', 'weekday labels');
+  labelsGroup.setAttribute('fill', textColor);
+
+  for (const weekdayIndex of VISIBLE_WEEKDAY_INDICES) {
+    const weekdayLabel = WEEKDAY_LABELS[weekdayIndex];
+
+    if (!weekdayLabel) {
+      continue;
+    }
+
+    appendSvgText(
+      document,
+      labelsGroup,
+      {
+        x: String(LEFT_MARGIN + CELL_INSET - LABEL_GAP),
+        y: String(yScale.apply(weekdayIndex) + yScale.bandwidth / 2 + 4),
+        'text-anchor': 'end',
+      },
+      weekdayLabel,
+    );
+  }
+
+  svg.append(labelsGroup);
+}
+
+function appendMonthLabels(
+  svg: PlotSvgElement,
+  document: Document,
+  activities: Array<PlotActivity>,
+  textColor: string,
+): void {
+  const xScale = svg.scale('x');
+
+  if (!xScale) {
+    return;
+  }
+
+  const labelsGroup = document.createElementNS(SVG_NAMESPACE, 'g');
+  labelsGroup.setAttribute('aria-label', 'month labels');
+  labelsGroup.setAttribute('fill', textColor);
+
+  for (const activity of activities) {
+    if (!activity.monthTick) {
+      continue;
+    }
+
+    const monthDate = utcMonth.floor(new Date(`${activity.date}T00:00:00Z`));
+
+    appendSvgText(
+      document,
+      labelsGroup,
+      {
+        x: String(xScale.apply(activity.weekIndex) + CELL_INSET),
+        y: String(TOP_MARGIN + CELL_INSET - LABEL_GAP),
+        // 'dominant-baseline': 'text-after-edge',
+        'text-anchor': 'start',
+      },
+      monthFormatter.format(monthDate),
+    );
+  }
+
+  svg.append(labelsGroup);
+}
+
+export function renderCalendarSvg(
+  activities: Array<PlotActivity>,
   colorScheme: CalendarColorScheme,
   theme: CalendarTheme,
   availableThemes: ThemeMap,
 ): string {
-  const activities = buildActivities(startDate, endDate, countsByDate);
   const resolvedTheme =
     availableThemes[theme] ?? availableThemes[DEFAULT_THEME_NAME];
 
@@ -204,38 +343,126 @@ function renderCalendarSvg(
     return EMPTY_SVG;
   }
 
-  const markup = renderToStaticMarkup(
-    createElement(ActivityCalendar, {
-      data: activities,
-      weekStart: 1,
-      blockSize: 12,
-      blockMargin: 4,
-      blockRadius: 2,
-      fontSize: 12,
-      colorScheme,
-      theme: resolvedTheme,
-      showWeekdayLabels: WEEKDAY_LABELS,
-      showTotalCount: false,
-      showColorLegend: false,
-      renderBlock: (block, activity) =>
-        cloneElement(
-          block,
-          undefined,
-          createElement(
-            'title',
-            undefined,
-            `${activity.date}: ${activity.count} activities`,
-          ),
-        ),
-    }),
+  const document = new JSDOM('').window.document;
+  const weekCount =
+    Math.max(...activities.map((activity) => activity.weekIndex)) + 1;
+  const textColor = TEXT_COLORS[colorScheme];
+  const svgWidth = LEFT_MARGIN + RIGHT_MARGIN + weekCount * CELL_STEP;
+  const plotHeight =
+    TOP_MARGIN + BOTTOM_MARGIN + WEEKDAY_LABELS.length * CELL_STEP;
+  const svgHeight = plotHeight + LEGEND_HEIGHT;
+  const svg = Plot.plot({
+    document,
+    width: svgWidth,
+    height: plotHeight,
+    marginTop: TOP_MARGIN,
+    marginRight: RIGHT_MARGIN,
+    marginBottom: BOTTOM_MARGIN,
+    marginLeft: LEFT_MARGIN,
+    style: {
+      background: 'transparent',
+      color: textColor,
+      fontFamily: FONT_STACK,
+      fontSize: '12px',
+    },
+    x: {
+      axis: null,
+      domain: Array.from({ length: weekCount }, (_, index) => index),
+      padding: 0,
+      round: true,
+    },
+    y: {
+      axis: null,
+      domain: Array.from(WEEKDAY_LABELS, (_, index) => index),
+      padding: 0,
+      round: true,
+    },
+    color: {
+      type: 'ordinal',
+      domain: [0, 1, 2, 3, 4],
+      range: resolvedTheme[colorScheme],
+      legend: false,
+    },
+    marks: [
+      Plot.cell(activities, {
+        x: 'weekIndex',
+        y: 'weekdayIndex',
+        fill: 'level',
+        stroke: CELL_BORDER,
+        strokeWidth: CELL_BORDER_WIDTH,
+        inset: CELL_INSET,
+        rx: CELL_RADIUS,
+        ry: CELL_RADIUS,
+        title: (activity) => `${activity.date}: ${activity.count} activities`,
+      }),
+    ],
+  }) as PlotSvgElement;
+
+  svg.setAttribute('xmlns', SVG_NAMESPACE);
+  svg.setAttribute('xmlns:xlink', XLINK_NAMESPACE);
+  svg.setAttribute('fill', textColor);
+  svg.setAttribute('font-family', FONT_STACK);
+  svg.setAttribute('font-size', String(FONT_SIZE));
+  svg.setAttribute('height', String(svgHeight));
+  svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+  svg.style.setProperty('background', 'transparent');
+  svg.style.setProperty('color', textColor);
+  svg.style.setProperty('font-family', FONT_STACK);
+  svg.style.setProperty('font-size', `${FONT_SIZE}px`);
+
+  appendMonthLabels(svg, document, activities, textColor);
+  appendWeekdayLabels(svg, document, textColor);
+
+  const legendGroup = document.createElementNS(SVG_NAMESPACE, 'g');
+  const legendSwatchWidth = 5 * 10 + 4 * 3;
+  const legendMoreX = svgWidth - RIGHT_MARGIN - LEGEND_RIGHT_PADDING;
+  const legendSwatchStartX =
+    legendMoreX - LEGEND_LABEL_WIDTH - LEGEND_LABEL_GAP - legendSwatchWidth;
+  const legendY = plotHeight + 4;
+
+  legendGroup.setAttribute('aria-label', 'legend');
+  legendGroup.setAttribute('fill', textColor);
+
+  appendSvgText(
+    document,
+    legendGroup,
+    {
+      x: String(legendSwatchStartX - LEGEND_LABEL_GAP),
+      y: String(legendY + 9),
+      'text-anchor': 'end',
+    },
+    LEGEND_LABELS.less,
   );
 
-  const svg = extractCalendarSvg(markup);
-  if (!svg) {
-    return EMPTY_SVG;
-  }
+  resolvedTheme[colorScheme].forEach((fill, index) => {
+    const swatch = document.createElementNS(SVG_NAMESPACE, 'rect');
 
-  return toStandaloneSvg(svg);
+    swatch.setAttribute('x', String(legendSwatchStartX + index * CELL_STEP));
+    swatch.setAttribute('y', String(legendY));
+    swatch.setAttribute('width', '10');
+    swatch.setAttribute('height', '10');
+    swatch.setAttribute('rx', String(CELL_RADIUS));
+    swatch.setAttribute('ry', String(CELL_RADIUS));
+    swatch.setAttribute('fill', fill);
+    swatch.setAttribute('stroke', CELL_BORDER);
+    swatch.setAttribute('stroke-width', String(CELL_BORDER_WIDTH));
+    legendGroup.append(swatch);
+  });
+
+  appendSvgText(
+    document,
+    legendGroup,
+    {
+      x: String(legendMoreX),
+      y: String(legendY + 9),
+      'text-anchor': 'end',
+    },
+    LEGEND_LABELS.more,
+  );
+
+  svg.append(legendGroup);
+
+  return svg.outerHTML;
 }
 
 async function renderDateRangeSvg(
@@ -273,9 +500,7 @@ async function renderDateRangeSvg(
   }
 
   return renderCalendarSvg(
-    start,
-    end,
-    countsByDate,
+    buildPlotActivities(start, end, countsByDate),
     colorScheme,
     theme,
     availableThemes,

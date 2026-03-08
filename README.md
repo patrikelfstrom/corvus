@@ -3,9 +3,9 @@
   <h1 >Corvus</h1>
 </div>
 
-Corvus automatically syncs commits from repositories on GitHub, GitLab, Bitbucket, Gitea, Forgejo, and local filesystem and serves a contribution calendar SVG.
+Corvus automatically syncs commits from repositories on GitHub, GitLab, Bitbucket, Gitea, Forgejo, and local filesystem and serves a contribution calendar SVG that you can embed on your favorite websites.
 
-Calendar is powered by [react-activity-calendar](https://github.com/grubersjoe/react-activity-calendar).
+The calendar is rendered server-side to SVG using [D3](https://d3js.org/) and [Observable Plot](https://observablehq.com/plot/).
 
 ## Get started
 

@@ -3,23 +3,20 @@ import { getQuery, getRequestURL } from 'nitro/h3';
 import { getConfigCacheVersion } from '../config.ts';
 import { renderRollingYearsSvg } from '../year-svg.ts';
 
-const ONE_HOUR_SECONDS = 60 * 60;
+export const ONE_HOUR_SECONDS = 60 * 60;
 const COLOR_SCHEME_HEADER = 'Sec-CH-Prefers-Color-Scheme';
 
 export default defineCachedHandler(
   async (event) => {
-    const query = getQuery(event);
-
-    const colorSchemeQuery = query.colorScheme;
+    const { colorScheme, theme } = getQuery(event);
     const colorSchemeHeader = event.req.headers.get(COLOR_SCHEME_HEADER);
-    const colorScheme =
-      typeof colorSchemeQuery === 'string'
-        ? colorSchemeQuery
+    const colorSchemeValue =
+      typeof colorScheme === 'string'
+        ? colorScheme
         : (colorSchemeHeader ?? undefined);
+    const themeValue = typeof theme === 'string' ? theme : undefined;
 
-    const theme = typeof query.theme === 'string' ? query.theme : undefined;
-
-    const svg = await renderRollingYearsSvg(1, colorScheme, theme);
+    const svg = await renderRollingYearsSvg(1, colorSchemeValue, themeValue);
 
     return new Response(svg, {
       headers: {
@@ -35,13 +32,11 @@ export default defineCachedHandler(
   {
     getKey: (event) => {
       const requestUrl = getRequestURL(event);
-      const colorSchemeHeader =
-        event.req.headers.get(COLOR_SCHEME_HEADER) ?? '';
 
       return [
         requestUrl.pathname,
         requestUrl.search,
-        colorSchemeHeader,
+        event.req.headers.get(COLOR_SCHEME_HEADER) ?? '',
         getConfigCacheVersion(),
       ].join(':');
     },
