@@ -14,7 +14,8 @@ import {
   bitbucketWorkspaceAccessSchema,
 } from './types.ts';
 
-const ITEMS_PER_PAGE = 100;
+const WORKSPACES_PER_PAGE = 100;
+const PULL_REQUESTS_PER_PAGE = 50;
 
 const bitbucketCurrentUserSchema = z.object({
   uuid: z.string().trim().min(1),
@@ -82,7 +83,7 @@ async function fetchUserWorkspaces(
 ): Promise<Array<string>> {
   const slugs: Array<string> = [];
   let url: string | undefined =
-    `${BITBUCKET_API_BASE}/user/workspaces?pagelen=${ITEMS_PER_PAGE}`;
+    `${BITBUCKET_API_BASE}/user/workspaces?pagelen=${WORKSPACES_PER_PAGE}`;
 
   while (url) {
     const data: z.infer<typeof bitbucketWorkspacePageSchema> =
@@ -132,7 +133,7 @@ async function fetchWorkspacePullRequests(
     `${BITBUCKET_API_BASE}/workspaces/${encodeURIComponent(workspace)}/pullrequests/${encodeURIComponent(userUuid)}`,
   );
 
-  url.searchParams.set('pagelen', String(ITEMS_PER_PAGE));
+  url.searchParams.set('pagelen', String(PULL_REQUESTS_PER_PAGE));
   url.searchParams.set('sort', '-created_on');
   url.searchParams.append('state', 'OPEN');
   url.searchParams.append('state', 'MERGED');
