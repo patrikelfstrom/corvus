@@ -7,7 +7,7 @@ const syncIntegrationsTaskPayloadSchema = z
     integrationIds: z.array(z.string().trim().min(1)).optional(),
     ignoreDateScope: z.boolean().optional(),
   })
-  .passthrough();
+  .loose();
 
 export interface SyncIntegrationsTaskPayload extends SyncExecutionOptions {
   integrationIds?: Array<string>;

@@ -4,7 +4,7 @@ node_modules/
 .nitro/
 .tanstack/
 .output/
-dev/
-data/
-logs/
-config/
+/dev/
+/data/
+/logs/
+/config/
