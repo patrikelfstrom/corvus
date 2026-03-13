@@ -49,6 +49,47 @@ test('renderCalendarSvg returns SVG with month labels, weekday labels, and toolt
   assert.doesNotMatch(svg, />Fri<\/text>/);
 });
 
+test('renderCalendarSvg omits the summary title when none is provided', () => {
+  const activities = buildPlotActivities(
+    new Date('2026-01-26T00:00:00Z'),
+    new Date('2026-02-03T00:00:00Z'),
+    makeCountsByDate([
+      ['2026-01-27', 1],
+      ['2026-02-01', 4],
+      ['2026-02-03', 2],
+    ]),
+  );
+
+  const svg = renderCalendarSvg(activities, 'light', 'corvus', themes);
+
+  assert.doesNotMatch(svg, /<title>7 contributions in the last year<\/title>/);
+  assert.doesNotMatch(svg, />7 contributions in the last year<\/text>/);
+});
+
+test('renderCalendarSvg can hide the visible summary title while keeping the svg title', () => {
+  const activities = buildPlotActivities(
+    new Date('2026-01-26T00:00:00Z'),
+    new Date('2026-02-03T00:00:00Z'),
+    makeCountsByDate([
+      ['2026-01-27', 1],
+      ['2026-02-01', 4],
+      ['2026-02-03', 2],
+    ]),
+  );
+
+  const svg = renderCalendarSvg(
+    activities,
+    'light',
+    'corvus',
+    themes,
+    '7 contributions in the last year',
+    false,
+  );
+
+  assert.match(svg, /<title>7 contributions in the last year<\/title>/);
+  assert.doesNotMatch(svg, />7 contributions in the last year<\/text>/);
+});
+
 test('renderCalendarSvg uses prefers-color-scheme CSS when no explicit color scheme is provided', () => {
   const activities = buildPlotActivities(
     new Date('2026-01-26T00:00:00Z'),

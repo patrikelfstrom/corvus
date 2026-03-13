@@ -36,7 +36,8 @@ async function withTempConfig(
 
 test('loadConfig includes custom themes alongside built-in themes', async () => {
   await withTempConfig(
-    `theme: fuchsia
+    `settings:
+  theme: fuchsia
 themes:
   fuchsia:
     light:
@@ -56,7 +57,7 @@ themes:
       const config = loadConfig();
       const themes = config.themes;
 
-      assert.equal(config.theme, 'fuchsia');
+      assert.equal(config.settings.theme, 'fuchsia');
       assert.deepEqual(themes.fuchsia, {
         light: ['#eff2f5', '#fbb4b9', '#f768a1', '#c51b8a', '#7a0177'],
         dark: ['#151b23', '#7a0177', '#c51b8a', '#f768a1', '#fbb4b9'],
@@ -69,7 +70,8 @@ themes:
 
 test('loadConfig preserves the configured default theme', async () => {
   await withTempConfig(
-    `theme: fuchsia
+    `settings:
+  theme: fuchsia
 themes:
   fuchsia:
     light:
@@ -88,7 +90,37 @@ themes:
     () => {
       const config = loadConfig();
 
-      assert.equal(config.theme, 'fuchsia');
+      assert.equal(config.settings.theme, 'fuchsia');
+    },
+  );
+});
+
+test('loadConfig falls back to the legacy top-level theme key', async () => {
+  await withTempConfig('theme: github\n', () => {
+    const config = loadConfig();
+
+    assert.equal(config.settings.theme, 'github');
+  });
+});
+
+test('loadConfig defaults the title setting to enabled', async () => {
+  await withTempConfig('themes: {}\n', () => {
+    const config = loadConfig();
+
+    assert.equal(config.settings.title, true);
+    assert.equal(config.settings.theme, undefined);
+  });
+});
+
+test('loadConfig preserves a configured title setting', async () => {
+  await withTempConfig(
+    `settings:
+  title: false
+`,
+    () => {
+      const config = loadConfig();
+
+      assert.equal(config.settings.title, false);
     },
   );
 });
@@ -284,7 +316,8 @@ test('loadConfig ignores non-renderable custom themes and logs a warning', async
 
 test('loadConfig ignores an unknown default theme and logs a warning', async () => {
   await withTempConfig(
-    `theme: missing
+    `settings:
+  theme: missing
 themes:
   fuchsia:
     light:
@@ -312,7 +345,7 @@ themes:
       try {
         const config = loadConfig();
 
-        assert.equal(config.theme, undefined);
+        assert.equal(config.settings.theme, undefined);
         assert.ok(
           warningMessages.includes(
             'Ignoring unknown default theme from config.yaml',
@@ -327,7 +360,8 @@ themes:
 
 test('getConfigCacheVersion changes when config.yaml changes', async () => {
   await withTempConfig(
-    `theme: github
+    `settings:
+  theme: github
 themes:
   fuchsia:
     light:
@@ -353,7 +387,8 @@ themes:
 
       writeFileSync(
         configPath,
-        `theme: fuchsia
+        `settings:
+  theme: fuchsia
 themes:
   fuchsia:
     light:

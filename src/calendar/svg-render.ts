@@ -194,6 +194,7 @@ export function renderCalendarSvg(
   theme: CalendarTheme,
   availableThemes: ThemeMap,
   svgTitle?: string,
+  showVisibleTitle = true,
 ): string {
   const resolvedTheme =
     availableThemes[theme] ?? availableThemes[DEFAULT_THEME_NAME];
@@ -207,7 +208,8 @@ export function renderCalendarSvg(
   const weekCount =
     Math.max(...activities.map((activity) => activity.weekIndex)) + 1;
   const textColor = 'var(--calendar-text-color)';
-  const contentOffsetY = svgTitle ? SUMMARY_TITLE_Y + SUMMARY_TITLE_HEIGHT : 0;
+  const contentOffsetY =
+    svgTitle && showVisibleTitle ? SUMMARY_TITLE_Y + SUMMARY_TITLE_HEIGHT : 0;
   const svgWidth = LEFT_MARGIN + RIGHT_MARGIN + weekCount * CELL_STEP;
   const plotHeight =
     contentOffsetY +
@@ -279,6 +281,9 @@ export function renderCalendarSvg(
 
   if (svgTitle) {
     appendSvgTitle(svg, document, svgTitle);
+  }
+
+  if (svgTitle && showVisibleTitle) {
     appendVisibleSvgTitle(svg, document, svgTitle, textColor);
   }
 

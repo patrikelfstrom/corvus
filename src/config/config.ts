@@ -26,7 +26,9 @@ const DEFAULT_CONFIG_TEMPLATE = `# Application configuration
 #
 # Example:
 # 
-# theme: fuchsia
+# settings:
+#   theme: fuchsia
+#   title: false
 # 
 # themes:
 #   fuchsia:
@@ -46,15 +48,26 @@ const DEFAULT_CONFIG_TEMPLATE = `# Application configuration
 themes: {}
 `;
 
+const settingsSchema = z
+  .object({
+    theme: z.string().min(1).optional(),
+    title: z.boolean().default(true),
+  })
+  .default({ title: true });
+
 const appConfigSchema = z
   .object({
     theme: z.string().min(1).optional(),
+    settings: settingsSchema,
     themes: z.record(z.string(), themeSchema).default({}),
   })
   .loose();
 
 export type AppConfig = {
-  theme?: string;
+  settings: {
+    theme?: string;
+    title: boolean;
+  };
   themes: ThemeMap;
 };
 
@@ -215,11 +228,14 @@ export function loadConfig(): AppConfig {
   );
   const availableThemes = mergeThemes(customThemes);
   const config: AppConfig = {
-    theme: normalizeConfiguredDefaultTheme(
-      parsedConfig.data.theme,
-      availableThemes,
-      configPath,
-    ),
+    settings: {
+      ...parsedConfig.data.settings,
+      theme: normalizeConfiguredDefaultTheme(
+        parsedConfig.data.settings.theme ?? parsedConfig.data.theme,
+        availableThemes,
+        configPath,
+      ),
+    },
     themes: availableThemes,
   };
 

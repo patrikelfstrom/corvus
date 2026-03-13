@@ -1,5 +1,5 @@
 import { loadConfig } from '../config/config.ts';
-import { DEFAULT_THEME_NAME, type ThemeMap } from '../config/themes.ts';
+import type { ThemeMap } from '../config/themes.ts';
 import { buildPlotActivities } from './activity.ts';
 import {
   getFixedWeekWindow,
@@ -23,6 +23,7 @@ async function renderDateRangeSvg(
   colorScheme: CalendarColorScheme | undefined,
   theme: CalendarTheme,
   availableThemes: ThemeMap,
+  showTitle: boolean,
   summaryPeriodLabel?: string,
 ): Promise<string> {
   const normalizedStartDate = toUtcDateOnly(startDate);
@@ -66,13 +67,15 @@ async function renderDateRangeSvg(
     theme,
     availableThemes,
     svgTitle,
+    showTitle,
   );
 }
 
 export async function renderRollingYearsSvg(
   years: number,
   colorScheme: string | undefined,
-  theme: CalendarTheme = DEFAULT_THEME_NAME,
+  theme?: CalendarTheme,
+  showTitle?: boolean,
 ): Promise<string> {
   if (!Number.isInteger(years) || years < 1) {
     return EMPTY_SVG;
@@ -80,9 +83,10 @@ export async function renderRollingYearsSvg(
 
   const config = loadConfig();
   const availableThemes = config.themes;
-  const defaultTheme = parseThemeName(config.theme, availableThemes);
+  const defaultTheme = parseThemeName(config.settings.theme, availableThemes);
   const resolvedColorScheme = parseOptionalColorScheme(colorScheme);
   const resolvedTheme = parseThemeName(theme, availableThemes, defaultTheme);
+  const resolvedShowTitle = showTitle ?? config.settings.title;
 
   let start: Date;
   let end: Date;
@@ -103,6 +107,7 @@ export async function renderRollingYearsSvg(
     resolvedColorScheme,
     resolvedTheme,
     availableThemes,
+    resolvedShowTitle,
     years === 1 ? 'in the last year' : undefined,
   );
 }

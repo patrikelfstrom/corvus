@@ -26,6 +26,10 @@ export function parseThemeName(
   availableThemes: ThemeMap = themes,
   fallbackThemeName: string = DEFAULT_THEME_NAME,
 ): string {
+  if (value == null) {
+    return fallbackThemeName;
+  }
+
   const result = getThemeNameSchema(availableThemes).safeParse(value);
 
   return result.success ? result.data : fallbackThemeName;
@@ -51,6 +55,22 @@ export function parseOptionalColorScheme(
   }
 
   const result = colorSchemesSchema.safeParse(value);
+
+  return result.success ? result.data : undefined;
+}
+
+const booleanQuerySchema = z.enum(['true', 'false']).transform((value) => {
+  return value === 'true';
+});
+
+export function parseOptionalBooleanQuery(
+  value: string | undefined,
+): boolean | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  const result = booleanQuerySchema.safeParse(value.trim().toLowerCase());
 
   return result.success ? result.data : undefined;
 }

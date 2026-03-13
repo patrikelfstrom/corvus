@@ -13,7 +13,7 @@ The calendar is rendered server-side to SVG using [D3](https://d3js.org/) and [O
 
 1. Run Corvus with Docker Compose
 2. Configure integrations in `data/integrations.yaml`
-3. Configure optional themes in `data/config.yaml`
+3. Configure optional display settings and themes in `data/config.yaml`
 4. Access your contribution calendar at `http://localhost:3000/year.svg`
 
 Self-host using docker compose:
@@ -125,10 +125,11 @@ integrations:
 
 ### Themes
 
-Corvus comes with two built-in themes, `corvus` and `github`, which can be selected by setting the default `theme` property in `data/config.yaml` or with the `theme` query parameter, for example `/year.svg?theme=github`.
+Corvus comes with two built-in themes, `corvus` and `github`, which can be selected by setting the default `settings.theme` property in `data/config.yaml` or with the `theme` query parameter, for example `/year.svg?theme=github`.
 
 ```yaml
-theme: github
+settings:
+  theme: github
 ```
 
 #### Custom themes
@@ -157,6 +158,17 @@ Custom themes are available in addition to the built-in themes and can still be 
 #### Dark mode
 
 Corvus supports dark mode and the calendar will automatically switch between light and dark themes using CSS `prefers-color-scheme` inside the generated SVG. This allows embedded SVGs to follow the surrounding page's color scheme.
+
+### Display settings
+
+You can disable the visible summary title in `data/config.yaml`:
+
+```yaml
+settings:
+  title: false
+```
+
+You can also override that per request with the `title` query parameter, for example `/year.svg?title=false`.
 
 ## Environment defaults
 
