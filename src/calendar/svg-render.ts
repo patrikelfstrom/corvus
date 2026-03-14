@@ -182,7 +182,7 @@ function appendVisibleSvgTitle(
       fill: textColor,
       'font-size': String(SUMMARY_TITLE_FONT_SIZE),
       'text-anchor': 'start',
-      'dominant-baseline': 'text-top',
+      'dominant-baseline': 'text-before-edge',
     },
     title,
   );
