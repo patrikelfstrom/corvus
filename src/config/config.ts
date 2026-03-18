@@ -10,53 +10,46 @@ import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 import { weekStartSchema } from '../calendar/week-start.ts';
 import { logger } from '../logger.ts';
+import { getDefaultConfigTemplate } from './default-templates.ts';
 import { readEnv } from './env.ts';
 import {
-  themes as builtInThemes,
   DEFAULT_THEME_NAME,
   getInvalidThemeReason,
   mergeThemes,
   type ThemeMap,
   themeSchema,
 } from './themes.ts';
+import {
+  getTranslationsCacheVersion,
+  initTranslations,
+} from './translations.ts';
 
 const CONFIG_FILE_NAME = 'config.yaml';
-const DEFAULT_CONFIG_TEMPLATE = `# Application configuration
-# Define optional runtime configuration here.
-# Themes are available in addition to the built-in themes.
-#
-# Example:
-# 
-# settings:
-#   theme: fuchsia
-#   title: false
-#   week_start: sunday
-# 
-# themes:
-#   fuchsia:
-#     light:
-#       - "#eff2f5"
-#       - "#fbb4b9"
-#       - "#f768a1"
-#       - "#c51b8a"
-#       - "#7a0177"
-#     dark:
-#       - "#151b23"
-#       - "#7a0177"
-#       - "#c51b8a"
-#       - "#f768a1"
-#       - "#fbb4b9"
-
-themes: {}
-`;
 
 const settingsSchema = z
   .object({
+    fallback_language: z
+      .string()
+      .trim()
+      .min(1)
+      .transform((value) => value.toLowerCase())
+      .default('en-us'),
+    language: z
+      .string()
+      .trim()
+      .min(1)
+      .transform((value) => value.toLowerCase())
+      .default('auto'),
     theme: z.string().min(1).optional(),
     title: z.boolean().default(true),
     week_start: weekStartSchema,
   })
-  .default({ title: true, week_start: 'sunday' });
+  .default({
+    fallback_language: 'en-us',
+    language: 'auto',
+    title: true,
+    week_start: 'sunday',
+  });
 
 const appConfigSchema = z
   .object({
@@ -68,6 +61,8 @@ const appConfigSchema = z
 
 export type AppConfig = {
   settings: {
+    fallbackLanguage: string;
+    language: string;
     theme?: string;
     title: boolean;
     weekStart: z.infer<typeof weekStartSchema>;
@@ -90,9 +85,10 @@ function resolveConfigPath(configPath = readEnv().CONFIG_PATH): string {
 
 export function getConfigCacheVersion(): string {
   const configPath = initConfig();
+  initTranslations();
   const stats = statSync(configPath);
 
-  return `${stats.mtimeMs}:${stats.size}`;
+  return `${stats.mtimeMs}:${stats.size}|${getTranslationsCacheVersion()}`;
 }
 
 export function initConfig(): string {
@@ -105,7 +101,7 @@ export function initConfig(): string {
   }
 
   mkdirSync(path.dirname(configPath), { recursive: true });
-  writeFileSync(configPath, DEFAULT_CONFIG_TEMPLATE, 'utf8');
+  writeFileSync(configPath, getDefaultConfigTemplate(), 'utf8');
 
   logger.info({ configPath }, 'Created default config file');
 
@@ -134,12 +130,6 @@ function validateConfiguredThemes(configuredThemes: ThemeMap): void {
       );
     }
 
-    if (themeName in builtInThemes) {
-      throw new Error(
-        `Invalid config.yaml: themes.${themeName}: theme name conflicts with a built-in theme`,
-      );
-    }
-
     void theme;
   }
 }
@@ -160,7 +150,7 @@ function sanitizeConfiguredThemes(
           themeName,
           invalidReason,
         },
-        'Ignoring invalid custom theme from config.yaml',
+        'Ignoring invalid theme from config.yaml',
       );
       continue;
     }
@@ -233,6 +223,8 @@ export function loadConfig(): AppConfig {
   const availableThemes = mergeThemes(customThemes);
   const config: AppConfig = {
     settings: {
+      fallbackLanguage: parsedConfig.data.settings.fallback_language,
+      language: parsedConfig.data.settings.language,
       title: parsedConfig.data.settings.title,
       weekStart: parsedConfig.data.settings.week_start,
       theme: normalizeConfiguredDefaultTheme(

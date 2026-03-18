@@ -1,5 +1,11 @@
 import { loadConfig } from '../config/config.ts';
 import type { ThemeMap } from '../config/themes.ts';
+import {
+  type AppTranslation,
+  getLocalizedWeekdayLabels,
+  type ResolvedAppTranslation,
+  resolveAppTranslation,
+} from '../config/translations.ts';
 import { buildPlotActivities } from './activity.ts';
 import {
   clampUtcDateRangeToToday,
@@ -26,7 +32,9 @@ async function renderDateRangeSvg(
   availableThemes: ThemeMap,
   showTitle: boolean,
   weekStart: WeekStart,
-  summaryPeriodLabel?: string,
+  translation: AppTranslation,
+  locale: string,
+  includeLastYearSummary = false,
 ): Promise<string> {
   const clampedRange = clampUtcDateRangeToToday(startDate, endDate);
 
@@ -45,11 +53,14 @@ async function renderDateRangeSvg(
   }
 
   const activities = buildPlotActivities(start, end, countsByDate, weekStart);
-  const weekdayLabels = getWeekdayLabels(weekStart);
-  const svgTitle = summaryPeriodLabel
+  const weekdayLabels = getWeekdayLabels(
+    weekStart,
+    getLocalizedWeekdayLabels(locale),
+  );
+  const svgTitle = includeLastYearSummary
     ? createSummaryTitle(
         activities.reduce((total, activity) => total + activity.count, 0),
-        summaryPeriodLabel,
+        translation,
       )
     : undefined;
 
@@ -58,6 +69,8 @@ async function renderDateRangeSvg(
     colorScheme,
     theme,
     availableThemes,
+    translation,
+    locale,
     svgTitle,
     showTitle,
     weekdayLabels,
@@ -70,12 +83,19 @@ export async function renderRollingYearsSvg(
   theme?: CalendarTheme,
   showTitle?: boolean,
   weekStart?: WeekStart,
+  translationOverride?: ResolvedAppTranslation,
 ): Promise<string> {
   if (!Number.isInteger(years) || years < 1) {
     return EMPTY_SVG;
   }
 
   const config = loadConfig();
+  const translation =
+    translationOverride ??
+    resolveAppTranslation({
+      fallbackLanguage: config.settings.fallbackLanguage,
+      language: config.settings.language,
+    });
   const availableThemes = config.themes;
   const defaultTheme = parseThemeName(config.settings.theme, availableThemes);
   const resolvedColorScheme = parseOptionalColorScheme(colorScheme);
@@ -104,7 +124,9 @@ export async function renderRollingYearsSvg(
     availableThemes,
     resolvedShowTitle,
     resolvedWeekStart,
-    years === 1 ? 'in the last year' : undefined,
+    translation.messages,
+    translation.locale,
+    years === 1,
   );
 }
 

@@ -1,4 +1,6 @@
+import { loadConfig } from '../config/config.ts';
 import { loadIntegrationsFromConfig } from '../config/integrations-config.ts';
+import { resolveAppTranslation } from '../config/translations.ts';
 import { logger } from '../logger.ts';
 import {
   resolveRequestedIntegrations,
@@ -7,10 +9,6 @@ import {
   type SyncAllIntegrationsResult,
 } from '../sync/index.ts';
 import type { SyncIntegrationsTaskPayload } from './sync-integrations-payload.ts';
-
-export const MANUAL_SYNC_BUSY_MESSAGE = 'Sync is currently active.';
-export const SCHEDULED_SYNC_BUSY_MESSAGE =
-  'Could not initiate scheduled sync. Sync is already running.';
 
 export type SyncTriggerSource = 'manual' | 'scheduled';
 
@@ -29,6 +27,27 @@ type SyncExecutor = (
 ) => Promise<SyncAllIntegrationsResult>;
 
 let activeSyncRun: Promise<SyncAllIntegrationsResult> | null = null;
+
+function getSyncMessages() {
+  const config = loadConfig();
+
+  return resolveAppTranslation({
+    fallbackLanguage: config.settings.fallbackLanguage,
+    language: config.settings.language,
+  }).messages.tasks.sync;
+}
+
+export function getManualSyncBusyMessage(): string {
+  return getSyncMessages().manual_busy;
+}
+
+export function getScheduledSyncBusyMessage(): string {
+  return getSyncMessages().scheduled_busy;
+}
+
+export function getSyncStartedMessage(): string {
+  return getSyncMessages().started;
+}
 
 async function executeSync(
   payload: SyncIntegrationsTaskPayload,
@@ -108,16 +127,17 @@ export async function triggerIntegrationsSync(
 
   if (activeSyncRun) {
     if (source === 'scheduled') {
-      logger.warn(SCHEDULED_SYNC_BUSY_MESSAGE);
+      const scheduledBusyMessage = getScheduledSyncBusyMessage();
+      logger.warn(scheduledBusyMessage);
       return {
         status: 'busy',
-        message: SCHEDULED_SYNC_BUSY_MESSAGE,
+        message: scheduledBusyMessage,
       };
     }
 
     return {
       status: 'busy',
-      message: MANUAL_SYNC_BUSY_MESSAGE,
+      message: getManualSyncBusyMessage(),
     };
   }
 
@@ -125,7 +145,7 @@ export async function triggerIntegrationsSync(
 
   return {
     status: 'started',
-    message: 'Sync triggered. Check server logs for progress and result.',
+    message: getSyncStartedMessage(),
   };
 }
 

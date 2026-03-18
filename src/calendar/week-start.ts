@@ -39,13 +39,12 @@ export function getWeekdayIndex(
 
 export function getWeekdayLabels(
   weekStart: WeekStart = 'sunday',
+  baseWeekdayLabels: Array<string> = Array.from(BASE_WEEKDAY_LABELS),
 ): Array<string> {
   const startIndex = getWeekStartDayIndex(weekStart);
 
-  return Array.from({ length: BASE_WEEKDAY_LABELS.length }, (_, index) => {
-    return BASE_WEEKDAY_LABELS[
-      (startIndex + index) % BASE_WEEKDAY_LABELS.length
-    ];
+  return Array.from({ length: baseWeekdayLabels.length }, (_, index) => {
+    return baseWeekdayLabels[(startIndex + index) % baseWeekdayLabels.length];
   });
 }
 

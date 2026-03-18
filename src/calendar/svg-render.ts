@@ -2,6 +2,10 @@ import * as Plot from '@observablehq/plot';
 import { utcMonth } from 'd3';
 import { Window } from 'happy-dom';
 import { DEFAULT_THEME_NAME, type ThemeMap } from '../config/themes.ts';
+import {
+  type AppTranslation,
+  resolveTranslationLocale,
+} from '../config/translations.ts';
 import type { PlotActivity } from './activity.ts';
 import {
   appendThemeStyles,
@@ -14,6 +18,7 @@ import {
   CELL_RADIUS,
   CELL_STEP,
   createContributionTitle,
+  createMonthFormatter,
   createSwatchTitle,
   EMPTY_SVG,
   FONT_SIZE,
@@ -24,9 +29,7 @@ import {
   LEGEND_HEIGHT,
   LEGEND_LABEL_GAP,
   LEGEND_LABEL_WIDTH,
-  LEGEND_LABELS,
   LEGEND_RIGHT_PADDING,
-  monthFormatter,
   RIGHT_MARGIN,
   SUMMARY_TITLE_FONT_SIZE,
   SUMMARY_TITLE_HEIGHT,
@@ -75,6 +78,7 @@ function appendWeekdayLabels(
   document: Document,
   textColor: string,
   weekdayLabels: Array<string>,
+  translation: AppTranslation,
 ): void {
   const yScale = svg.scale('y');
 
@@ -83,7 +87,10 @@ function appendWeekdayLabels(
   }
 
   const labelsGroup = document.createElementNS(SVG_NAMESPACE, 'g');
-  labelsGroup.setAttribute('aria-label', 'weekday labels');
+  labelsGroup.setAttribute(
+    'aria-label',
+    translation.calendar.aria.weekday_labels,
+  );
   labelsGroup.setAttribute('fill', textColor);
 
   for (const [weekdayIndex, weekdayLabel] of weekdayLabels.entries()) {
@@ -116,6 +123,8 @@ function appendMonthLabels(
   activities: Array<PlotActivity>,
   textColor: string,
   topOffset: number,
+  translation: AppTranslation,
+  locale: string,
 ): void {
   const xScale = svg.scale('x');
 
@@ -123,8 +132,12 @@ function appendMonthLabels(
     return;
   }
 
+  const monthFormatter = createMonthFormatter(locale);
   const labelsGroup = document.createElementNS(SVG_NAMESPACE, 'g');
-  labelsGroup.setAttribute('aria-label', 'month labels');
+  labelsGroup.setAttribute(
+    'aria-label',
+    translation.calendar.aria.month_labels,
+  );
   labelsGroup.setAttribute('fill', textColor);
 
   for (const activity of activities) {
@@ -149,15 +162,22 @@ function appendMonthLabels(
   svg.append(labelsGroup);
 }
 
-function getCellTitle(activity: PlotActivity): string {
-  const date = new Date(activity.date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
+function getCellTitle(
+  activity: PlotActivity,
+  translation: AppTranslation,
+  locale: string,
+): string {
+  const date = new Date(activity.date).toLocaleDateString(
+    resolveTranslationLocale(locale),
+    {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC',
+    },
+  );
 
-  return createContributionTitle(activity.count, date);
+  return createContributionTitle(activity.count, date, translation);
 }
 
 function appendSvgTitle(
@@ -198,6 +218,8 @@ export function renderCalendarSvg(
   colorScheme: CalendarColorScheme | undefined,
   theme: CalendarTheme,
   availableThemes: ThemeMap,
+  translation: AppTranslation,
+  locale: string,
   svgTitle?: string,
   showVisibleTitle = true,
   weekdayLabels: Array<string> = getWeekdayLabels(),
@@ -265,7 +287,7 @@ export function renderCalendarSvg(
         inset: CELL_INSET,
         rx: CELL_RADIUS,
         ry: CELL_RADIUS,
-        title: getCellTitle,
+        title: (activity) => getCellTitle(activity, translation, locale),
       }),
     ],
   }) as PlotSvgElement;
@@ -293,8 +315,16 @@ export function renderCalendarSvg(
     appendVisibleSvgTitle(svg, document, svgTitle, textColor);
   }
 
-  appendMonthLabels(svg, document, activities, textColor, contentOffsetY);
-  appendWeekdayLabels(svg, document, textColor, weekdayLabels);
+  appendMonthLabels(
+    svg,
+    document,
+    activities,
+    textColor,
+    contentOffsetY,
+    translation,
+    locale,
+  );
+  appendWeekdayLabels(svg, document, textColor, weekdayLabels, translation);
 
   const legendGroup = document.createElementNS(SVG_NAMESPACE, 'g');
   const legendSwatchWidth = 5 * 10 + 4 * 3;
@@ -303,7 +333,7 @@ export function renderCalendarSvg(
     legendMoreX - LEGEND_LABEL_WIDTH - LEGEND_LABEL_GAP - legendSwatchWidth;
   const legendY = plotHeight + 4;
 
-  legendGroup.setAttribute('aria-label', 'legend');
+  legendGroup.setAttribute('aria-label', translation.calendar.aria.legend);
   legendGroup.setAttribute('fill', textColor);
 
   appendSvgText(
@@ -314,7 +344,7 @@ export function renderCalendarSvg(
       y: String(legendY + 9),
       'text-anchor': 'end',
     },
-    LEGEND_LABELS.less,
+    translation.calendar.legend.less,
   );
 
   resolvedTheme[resolvedColorScheme].forEach((_fill, index) => {
@@ -331,7 +361,7 @@ export function renderCalendarSvg(
     swatch.setAttribute('stroke-width', String(CELL_BORDER_WIDTH));
 
     const swatchTitle = document.createElementNS(SVG_NAMESPACE, 'title');
-    swatchTitle.textContent = createSwatchTitle(index);
+    swatchTitle.textContent = createSwatchTitle(index, translation);
     swatch.append(swatchTitle);
 
     legendGroup.append(swatch);
@@ -345,7 +375,7 @@ export function renderCalendarSvg(
       y: String(legendY + 9),
       'text-anchor': 'end',
     },
-    LEGEND_LABELS.more,
+    translation.calendar.legend.more,
   );
 
   svg.append(legendGroup);

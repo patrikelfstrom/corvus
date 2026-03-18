@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -68,6 +68,39 @@ themes:
   );
 });
 
+test('loadConfig creates a default config file with settings and built-in themes', () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'corvus-config-test-'));
+  const previousConfigPath = process.env.CONFIG_PATH;
+
+  process.env.CONFIG_PATH = directory;
+
+  try {
+    const config = loadConfig();
+    const content = readFileSync(path.join(directory, 'config.yaml'), 'utf8');
+
+    assert.equal(config.settings.theme, 'corvus');
+    assert.ok(config.themes.corvus);
+    assert.ok(config.themes.github);
+    assert.ok(config.themes.ylgnbu);
+    assert.match(content, /^settings:\n/m);
+    assert.match(content, /^ {2}theme: corvus\n/m);
+    assert.match(content, /^themes:\n/m);
+    assert.match(content, /^ {2}corvus:\n/m);
+    assert.equal(
+      content.split('\n').some((line) => line.trimStart().startsWith('#')),
+      false,
+    );
+  } finally {
+    if (previousConfigPath == null) {
+      delete process.env.CONFIG_PATH;
+    } else {
+      process.env.CONFIG_PATH = previousConfigPath;
+    }
+
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('loadConfig preserves the configured default theme', async () => {
   await withTempConfig(
     `settings:
@@ -107,6 +140,8 @@ test('loadConfig defaults the title setting to enabled', async () => {
   await withTempConfig('themes: {}\n', () => {
     const config = loadConfig();
 
+    assert.equal(config.settings.fallbackLanguage, 'en-us');
+    assert.equal(config.settings.language, 'auto');
     assert.equal(config.settings.title, true);
     assert.equal(config.settings.weekStart, 'sunday');
     assert.equal(config.settings.theme, undefined);
@@ -135,6 +170,21 @@ test('loadConfig preserves a configured week start setting', async () => {
       const config = loadConfig();
 
       assert.equal(config.settings.weekStart, 'sunday');
+    },
+  );
+});
+
+test('loadConfig preserves configured language settings', async () => {
+  await withTempConfig(
+    `settings:
+  language: sv-se
+  fallback_language: en-us
+`,
+    () => {
+      const config = loadConfig();
+
+      assert.equal(config.settings.language, 'sv-se');
+      assert.equal(config.settings.fallbackLanguage, 'en-us');
     },
   );
 });
@@ -234,7 +284,7 @@ test('loadThemesFromConfig returns the themes config property', async () => {
   );
 });
 
-test('loadThemesFromConfig rejects custom themes that conflict with built-in names', async () => {
+test('loadThemesFromConfig allows overriding built-in theme names from config.yaml', async () => {
   await withTempConfig(
     `themes:
   github:
@@ -252,9 +302,13 @@ test('loadThemesFromConfig rejects custom themes that conflict with built-in nam
       - "#444444"
 `,
     () => {
-      assert.throws(() => loadThemesFromConfig(), {
-        message: /conflicts with a built-in theme/i,
+      const themes = loadThemesFromConfig();
+
+      assert.deepEqual(themes.github, {
+        light: ['#eff2f5', '#111111', '#222222', '#333333', '#444444'],
+        dark: ['#151b23', '#111111', '#222222', '#333333', '#444444'],
       });
+      assert.ok(themes.corvus);
     },
   );
 });
@@ -317,9 +371,7 @@ test('loadConfig ignores non-renderable custom themes and logs a warning', async
         assert.equal(themes.broken, undefined);
         assert.ok(themes.fuchsia);
         assert.ok(
-          warningMessages.includes(
-            'Ignoring invalid custom theme from config.yaml',
-          ),
+          warningMessages.includes('Ignoring invalid theme from config.yaml'),
         );
       } finally {
         (logger as unknown as { warn: typeof logger.warn }).warn = originalWarn;

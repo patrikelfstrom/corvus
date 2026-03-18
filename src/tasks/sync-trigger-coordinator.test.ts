@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { logger } from '../logger.ts';
 import {
+  getManualSyncBusyMessage,
+  getScheduledSyncBusyMessage,
   isSyncActive,
-  MANUAL_SYNC_BUSY_MESSAGE,
   resetSyncTriggerCoordinatorForTests,
-  SCHEDULED_SYNC_BUSY_MESSAGE,
   triggerIntegrationsSync,
 } from './sync-trigger-coordinator.ts';
 
@@ -88,7 +88,7 @@ test('triggerIntegrationsSync returns busy for manual triggers during an active 
 
   assert.deepEqual(busyResult, {
     status: 'busy',
-    message: MANUAL_SYNC_BUSY_MESSAGE,
+    message: getManualSyncBusyMessage(),
   });
 
   deferred.resolve(EMPTY_SYNC_SUMMARY);
@@ -124,9 +124,9 @@ test('triggerIntegrationsSync skips scheduled trigger when an active sync exists
 
     assert.deepEqual(busyResult, {
       status: 'busy',
-      message: SCHEDULED_SYNC_BUSY_MESSAGE,
+      message: getScheduledSyncBusyMessage(),
     });
-    assert.ok(warningMessages.includes(SCHEDULED_SYNC_BUSY_MESSAGE));
+    assert.ok(warningMessages.includes(getScheduledSyncBusyMessage()));
   } finally {
     (logger as unknown as { warn: typeof logger.warn }).warn = originalWarn;
     deferred.resolve(EMPTY_SYNC_SUMMARY);

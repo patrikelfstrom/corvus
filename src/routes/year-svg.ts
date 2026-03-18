@@ -6,7 +6,8 @@ import {
   parseOptionalDarkModeQuery,
   parseOptionalWeekStart,
 } from '../calendar/theme-query.ts';
-import { getConfigCacheVersion } from '../config/config.ts';
+import { getConfigCacheVersion, loadConfig } from '../config/config.ts';
+import { resolveAppTranslation } from '../config/translations.ts';
 
 export const ONE_HOUR_SECONDS = 60 * 60;
 
@@ -29,6 +30,12 @@ export default defineCachedHandler(
       typeof weekStart === 'string'
         ? parseOptionalWeekStart(weekStart)
         : undefined;
+    const config = loadConfig();
+    const translation = resolveAppTranslation({
+      acceptLanguage: event.req.headers.get('accept-language'),
+      fallbackLanguage: config.settings.fallbackLanguage,
+      language: config.settings.language,
+    });
 
     const svg = await renderRollingYearsSvg(
       1,
@@ -36,6 +43,7 @@ export default defineCachedHandler(
       themeValue,
       titleValue,
       weekStartValue,
+      translation,
     );
 
     return new Response(svg, {
@@ -48,10 +56,17 @@ export default defineCachedHandler(
   {
     getKey: (event) => {
       const requestUrl = getRequestURL(event);
+      const config = loadConfig();
+      const translation = resolveAppTranslation({
+        acceptLanguage: event.req.headers.get('accept-language'),
+        fallbackLanguage: config.settings.fallbackLanguage,
+        language: config.settings.language,
+      });
 
       return [
         requestUrl.pathname,
         requestUrl.search,
+        translation.id,
         getConfigCacheVersion(),
       ].join(':');
     },

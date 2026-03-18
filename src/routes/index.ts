@@ -1,18 +1,21 @@
 import { defineEventHandler } from 'h3';
+import { loadConfig } from '../config/config.ts';
+import { resolveAppTranslation } from '../config/translations.ts';
 
 const SVG_LINKS = ['/year.svg'];
+const APP_NAME = 'Corvus';
 
-function renderIndexHtml(): string {
+function renderIndexHtml(title: string, locale: string): string {
   const links = SVG_LINKS.map(
     (href) => `<li><a href="${href}">${href}</a></li>`,
   ).join('');
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${locale}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Corvus</title>
+    <title>${title}</title>
     <style>
 
       :root {
@@ -67,6 +70,13 @@ function renderIndexHtml(): string {
 }
 
 export default defineEventHandler((event) => {
+  const config = loadConfig();
+  const translation = resolveAppTranslation({
+    acceptLanguage: event.req.headers.get('accept-language'),
+    fallbackLanguage: config.settings.fallbackLanguage,
+    language: config.settings.language,
+  });
+
   event.res.headers.set('content-type', 'text/html; charset=utf-8');
-  return renderIndexHtml();
+  return renderIndexHtml(APP_NAME, translation.locale);
 });

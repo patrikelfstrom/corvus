@@ -1,4 +1,9 @@
 #!/usr/bin/env bun
+import { loadConfig } from '../src/config/config.ts';
+import {
+  formatTranslation,
+  resolveAppTranslation,
+} from '../src/config/translations.ts';
 
 interface CliEnv {
   CORVUS_TASK_HOST: string;
@@ -21,6 +26,15 @@ type FetchImplementation = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+function getCliMessages() {
+  const config = loadConfig();
+
+  return resolveAppTranslation({
+    fallbackLanguage: config.settings.fallbackLanguage,
+    language: config.settings.language,
+  }).messages.cli;
+}
+
 function readCliEnv(): CliEnv {
   const host = process.env.CORVUS_TASK_HOST?.trim() || '127.0.0.1';
   const port = process.env.PORT?.trim() || '3000';
@@ -34,7 +48,7 @@ function readCliEnv(): CliEnv {
 }
 
 function usage(): void {
-  console.error('Usage: corvus sync [--partial] [integration-id ...]');
+  console.error(getCliMessages().usage);
 }
 
 async function readErrorDetail(response: Response): Promise<string | null> {
@@ -132,13 +146,20 @@ export async function runSync(
   if (!response.ok) {
     const detail = await readErrorDetail(response);
     const suffix = detail ? `: ${detail}` : '';
+    const cliMessages = getCliMessages();
     console.error(
-      `Failed to trigger ${taskName} (${response.status} ${response.statusText})${suffix}`,
+      formatTranslation(cliMessages.failed_to_trigger, {
+        statusCode: response.status,
+        statusText: response.statusText,
+        suffix,
+        taskName,
+      }),
     );
     return 1;
   }
 
-  let message = 'Sync triggered. Check server logs for progress and result.';
+  const cliMessages = getCliMessages();
+  let message = cliMessages.default_sync_started;
   const contentType = response.headers.get('content-type') ?? '';
 
   if (contentType.includes('application/json')) {
@@ -180,11 +201,12 @@ async function main(): Promise<number> {
 if (import.meta.main) {
   main()
     .catch((error: unknown) => {
+      const cliMessages = getCliMessages();
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to contact running Corvus server: ${message}`);
       console.error(
-        'Make sure the app container is running before using corvus sync.',
+        formatTranslation(cliMessages.failed_to_contact, { message }),
       );
+      console.error(cliMessages.ensure_running);
       return 1;
     })
     .then((exitCode) => {

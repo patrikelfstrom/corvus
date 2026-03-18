@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { themes } from '../config/themes.ts';
+import {
+  getDefaultAppTranslation,
+  getDefaultTranslationLocale,
+} from '../config/translations.ts';
 import { buildPlotActivities } from './activity.ts';
 import { renderCalendarSvg } from './svg-render.ts';
 import { EMPTY_SVG } from './svg-style.ts';
@@ -11,8 +15,14 @@ function makeCountsByDate(
   return new Map(entries);
 }
 
+const translation = getDefaultAppTranslation();
+const locale = getDefaultTranslationLocale();
+
 test('renderCalendarSvg returns the empty SVG for empty activity data', () => {
-  assert.equal(renderCalendarSvg([], 'light', 'corvus', themes), EMPTY_SVG);
+  assert.equal(
+    renderCalendarSvg([], 'light', 'corvus', themes, translation, locale),
+    EMPTY_SVG,
+  );
 });
 
 test('renderCalendarSvg returns SVG with month labels, weekday labels, and tooltips', () => {
@@ -31,6 +41,8 @@ test('renderCalendarSvg returns SVG with month labels, weekday labels, and toolt
     'light',
     'corvus',
     themes,
+    translation,
+    locale,
     '7 contributions in the last year',
   );
 
@@ -66,6 +78,8 @@ test('renderCalendarSvg rotates weekday labels when the week starts on Monday', 
     'light',
     'corvus',
     themes,
+    translation,
+    locale,
     undefined,
     true,
     ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -90,7 +104,14 @@ test('renderCalendarSvg omits the summary title when none is provided', () => {
     ]),
   );
 
-  const svg = renderCalendarSvg(activities, 'light', 'corvus', themes);
+  const svg = renderCalendarSvg(
+    activities,
+    'light',
+    'corvus',
+    themes,
+    translation,
+    locale,
+  );
 
   assert.doesNotMatch(svg, /<title>7 contributions in the last year<\/title>/);
   assert.doesNotMatch(svg, />7 contributions in the last year<\/text>/);
@@ -112,6 +133,8 @@ test('renderCalendarSvg can hide the visible summary title while keeping the svg
     'light',
     'corvus',
     themes,
+    translation,
+    locale,
     '7 contributions in the last year',
     false,
   );
@@ -127,7 +150,14 @@ test('renderCalendarSvg uses prefers-color-scheme CSS when no explicit color sch
     makeCountsByDate([['2026-01-27', 7]]),
   );
 
-  const svg = renderCalendarSvg(activities, undefined, 'corvus', themes);
+  const svg = renderCalendarSvg(
+    activities,
+    undefined,
+    'corvus',
+    themes,
+    translation,
+    locale,
+  );
 
   assert.match(svg, /class="calendar-root"/);
   assert.match(svg, /@media \(prefers-color-scheme: dark\)/);
@@ -143,8 +173,22 @@ test('renderCalendarSvg uses the resolved theme colors for light and dark scheme
     makeCountsByDate([['2026-01-27', 7]]),
   );
 
-  const lightSvg = renderCalendarSvg(activities, 'light', 'corvus', themes);
-  const darkSvg = renderCalendarSvg(activities, 'dark', 'corvus', themes);
+  const lightSvg = renderCalendarSvg(
+    activities,
+    'light',
+    'corvus',
+    themes,
+    translation,
+    locale,
+  );
+  const darkSvg = renderCalendarSvg(
+    activities,
+    'dark',
+    'corvus',
+    themes,
+    translation,
+    locale,
+  );
 
   assert.match(lightSvg, /--calendar-level-0: #eff2f5/);
   assert.match(lightSvg, /--calendar-level-4: #003960/);
@@ -154,4 +198,77 @@ test('renderCalendarSvg uses the resolved theme colors for light and dark scheme
   assert.match(darkSvg, /--calendar-level-4: #A5D6E4/);
   assert.match(darkSvg, /color-scheme:dark;/);
   assert.doesNotMatch(darkSvg, /@media \(prefers-color-scheme: dark\)/);
+});
+
+test('renderCalendarSvg uses translated labels and tooltip templates', () => {
+  const activities = buildPlotActivities(
+    new Date('2026-01-26T00:00:00Z'),
+    new Date('2026-01-28T00:00:00Z'),
+    makeCountsByDate([['2026-01-27', 1]]),
+  );
+  const translated = {
+    ...translation,
+    calendar: {
+      ...translation.calendar,
+      aria: {
+        ...translation.calendar.aria,
+        legend: 'legend-sv',
+      },
+      contribution: {
+        ...translation.calendar.contribution,
+        singular_on_date: '{count} bidrag den {date}.',
+      },
+      legend: {
+        less: 'Mindre',
+        more: 'Mer',
+      },
+      swatch: {
+        singular: '{count} bidrag',
+        plural: '{count} bidrag',
+        overflow: '{count}+ bidrag',
+      },
+    },
+  };
+
+  const svg = renderCalendarSvg(
+    activities,
+    'light',
+    'corvus',
+    themes,
+    translated,
+    locale,
+  );
+
+  assert.match(svg, /aria-label="legend-sv"/);
+  assert.match(svg, />Mindre<\/text>/);
+  assert.match(svg, />Mer<\/text>/);
+  assert.match(svg, /<title>1 bidrag den January 27, 2026\.<\/title>/);
+  assert.match(svg, /<title>1 bidrag<\/title>/);
+});
+
+test('renderCalendarSvg falls back to en-US when translation locale is invalid', () => {
+  const activities = buildPlotActivities(
+    new Date('2026-01-26T00:00:00Z'),
+    new Date('2026-02-03T00:00:00Z'),
+    makeCountsByDate([
+      ['2026-01-27', 1],
+      ['2026-02-01', 4],
+    ]),
+  );
+  const translated = {
+    ...translation,
+  };
+
+  const svg = renderCalendarSvg(
+    activities,
+    'light',
+    'corvus',
+    themes,
+    translated,
+    'bogus_locale',
+  );
+
+  assert.match(svg, />Jan<\/text>/);
+  assert.match(svg, />Feb<\/text>/);
+  assert.match(svg, /<title>1 contribution on January 27, 2026\.<\/title>/);
 });

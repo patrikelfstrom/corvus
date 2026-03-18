@@ -8,11 +8,19 @@ import {
 import { runTask } from 'nitro/task';
 import type { TaskPayload } from 'nitro/types';
 import { z } from 'zod';
+import { loadConfig } from '../config/config.ts';
 import { readEnv } from '../config/env.ts';
 import { loadIntegrationsFromConfig } from '../config/integrations-config.ts';
+import {
+  formatTranslation,
+  resolveAppTranslation,
+} from '../config/translations.ts';
 import { resolveRequestedIntegrations } from '../sync/index.ts';
 import { parseSyncIntegrationsTaskPayload } from '../tasks/sync-integrations-payload.ts';
-import type { SyncTriggerResult } from '../tasks/sync-trigger-coordinator.ts';
+import {
+  getSyncStartedMessage,
+  type SyncTriggerResult,
+} from '../tasks/sync-trigger-coordinator.ts';
 import { createSyncTaskResponse as buildSyncTaskResponse } from './internal-task-sync-response.ts';
 
 const taskNameSchema = z.string().trim().min(1);
@@ -31,6 +39,11 @@ function isLoopbackAddress(address: string): boolean {
 }
 
 function parseSyncTriggerResult(taskResult: unknown): SyncTriggerResult {
+  const config = loadConfig();
+  const translation = resolveAppTranslation({
+    fallbackLanguage: config.settings.fallbackLanguage,
+    language: config.settings.language,
+  });
   const parsed = z
     .object({
       result: syncTriggerResultSchema,
@@ -40,7 +53,7 @@ function parseSyncTriggerResult(taskResult: unknown): SyncTriggerResult {
   if (!parsed.success) {
     throw new HTTPError({
       status: 500,
-      message: 'Sync task returned an invalid response.',
+      message: translation.messages.tasks.errors.invalid_sync_response,
     });
   }
 
@@ -48,12 +61,19 @@ function parseSyncTriggerResult(taskResult: unknown): SyncTriggerResult {
 }
 
 export default defineEventHandler(async (event) => {
+  const config = loadConfig();
+  const translation = resolveAppTranslation({
+    fallbackLanguage: config.settings.fallbackLanguage,
+    language: config.settings.language,
+  });
+  const taskErrors = translation.messages.tasks.errors;
+  const syncMessages = translation.messages.tasks.sync;
   const remoteAddress = event.req.ip;
 
   if (!remoteAddress || !isLoopbackAddress(remoteAddress)) {
     throw new HTTPError({
       status: 403,
-      message: 'Forbidden',
+      message: taskErrors.forbidden,
     });
   }
 
@@ -63,7 +83,7 @@ export default defineEventHandler(async (event) => {
     if (event.req.headers.get('x-corvus-token') !== expectedToken) {
       throw new HTTPError({
         status: 401,
-        message: 'Invalid task token',
+        message: taskErrors.invalid_token,
       });
     }
   }
@@ -72,7 +92,7 @@ export default defineEventHandler(async (event) => {
   if (rawTaskName == null) {
     throw new HTTPError({
       status: 400,
-      message: 'Task name is required',
+      message: taskErrors.task_name_required,
     });
   }
 
@@ -83,7 +103,7 @@ export default defineEventHandler(async (event) => {
   } catch {
     throw new HTTPError({
       status: 400,
-      message: 'Task name is invalid',
+      message: taskErrors.task_name_invalid,
     });
   }
 
@@ -93,8 +113,8 @@ export default defineEventHandler(async (event) => {
       status: 400,
       message:
         decodedTaskName.trim().length === 0
-          ? 'Task name is required'
-          : 'Task name is invalid',
+          ? taskErrors.task_name_required
+          : taskErrors.task_name_invalid,
     });
   }
 
@@ -102,25 +122,24 @@ export default defineEventHandler(async (event) => {
   if (!parsedPayload.success) {
     throw new HTTPError({
       status: 400,
-      message: 'Task payload must be an object',
+      message: taskErrors.payload_must_be_object,
     });
   }
 
   const payload: TaskPayload = parsedPayload.data;
 
   if (parsedTaskName.data === 'sync:integrations') {
-    let startedMessage =
-      'Sync triggered. Check server logs for progress and result.';
+    let startedMessage = getSyncStartedMessage();
 
     try {
       const { integrationIds, ignoreDateScope } =
         parseSyncIntegrationsTaskPayload(payload);
       const triggerLabel =
         ignoreDateScope === true
-          ? 'Full-history sync'
+          ? syncMessages.selection.full_history_label
           : ignoreDateScope === false
-            ? 'Partial sync'
-            : 'Sync';
+            ? syncMessages.selection.partial_label
+            : syncMessages.selection.generic_label;
 
       if (integrationIds) {
         const selectedIntegrations = resolveRequestedIntegrations(
@@ -128,24 +147,32 @@ export default defineEventHandler(async (event) => {
           integrationIds,
         );
         const integrationLabel =
-          selectedIntegrations.length === 1 ? 'integration' : 'integrations';
+          selectedIntegrations.length === 1
+            ? syncMessages.selection.integration_singular
+            : syncMessages.selection.integration_plural;
         const selectedIds = selectedIntegrations
           .map((integration) => integration.id)
           .join(', ');
 
-        startedMessage = `${triggerLabel} triggered for ${selectedIntegrations.length} ${integrationLabel} (ids: ${selectedIds}). Check server logs for progress and result.`;
+        startedMessage = formatTranslation(
+          syncMessages.selection.triggered_for_selection,
+          {
+            count: selectedIntegrations.length,
+            integrationLabel,
+            selectedIds,
+            triggerLabel,
+          },
+        );
       } else if (ignoreDateScope === true) {
-        startedMessage =
-          'Full-history sync triggered for all enabled integrations. Check server logs for progress and result.';
+        startedMessage = syncMessages.all_enabled_full_history;
       } else if (ignoreDateScope === false) {
-        startedMessage =
-          'Partial sync triggered for all enabled integrations. Check server logs for progress and result.';
+        startedMessage = syncMessages.all_enabled_partial;
       }
     } catch (error) {
       throw new HTTPError({
         status: 400,
         message:
-          error instanceof Error ? error.message : 'Task payload is invalid',
+          error instanceof Error ? error.message : taskErrors.payload_invalid,
       });
     }
 

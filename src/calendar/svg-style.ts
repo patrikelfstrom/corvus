@@ -1,4 +1,9 @@
 import type { Theme } from '../config/themes.ts';
+import {
+  type AppTranslation,
+  formatTranslation,
+  resolveTranslationLocale,
+} from '../config/translations.ts';
 
 export type CalendarColorScheme = 'light' | 'dark';
 export type CalendarTheme = string;
@@ -29,10 +34,6 @@ export const FONT_STACK =
   '-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif';
 export const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 export const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink';
-export const monthFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  timeZone: 'UTC',
-});
 
 export const TEXT_COLORS: Record<CalendarColorScheme, string> = {
   light: '#1f2328',
@@ -40,37 +41,73 @@ export const TEXT_COLORS: Record<CalendarColorScheme, string> = {
 };
 
 export const VISIBLE_WEEKDAY_INDICES = new Set([1, 3, 5]);
-export const LEGEND_LABELS = {
-  less: 'Less',
-  more: 'More',
-} as const;
 
-export function createContributionTitle(count: number, date: string): string {
-  if (count === 0) {
-    return `No contributions on ${date}.`;
-  }
-  if (count === 1) {
-    return `${count} contribution on ${date}.`;
-  }
-  return `${count} contributions on ${date}.`;
+export function createMonthFormatter(locale: string): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(resolveTranslationLocale(locale), {
+    month: 'short',
+    timeZone: 'UTC',
+  });
 }
 
-export function createSwatchTitle(index: number): string {
+export function createContributionTitle(
+  count: number,
+  date: string,
+  translation: AppTranslation,
+): string {
+  if (count === 0) {
+    return formatTranslation(translation.calendar.contribution.none_on_date, {
+      date,
+    });
+  }
+  if (count === 1) {
+    return formatTranslation(
+      translation.calendar.contribution.singular_on_date,
+      {
+        count,
+        date,
+      },
+    );
+  }
+
+  return formatTranslation(translation.calendar.contribution.plural_on_date, {
+    count,
+    date,
+  });
+}
+
+export function createSwatchTitle(
+  index: number,
+  translation: AppTranslation,
+): string {
   if (index === 1) {
-    return `${index} contribution`;
+    return formatTranslation(translation.calendar.swatch.singular, {
+      count: index,
+    });
   }
   if (index >= 4) {
-    return `${index}+ contributions`;
+    return formatTranslation(translation.calendar.swatch.overflow, {
+      count: index,
+    });
   }
-  return `${index} contributions`;
+
+  return formatTranslation(translation.calendar.swatch.plural, {
+    count: index,
+  });
 }
 
-export function createSummaryTitle(count: number, periodLabel: string): string {
+export function createSummaryTitle(
+  count: number,
+  translation: AppTranslation,
+): string {
   if (count === 1) {
-    return `${count} contribution ${periodLabel}`;
+    return formatTranslation(translation.calendar.summary.last_year_singular, {
+      count,
+    });
   }
 
-  return `${count} contributions ${periodLabel}`;
+  return formatTranslation(translation.calendar.summary.last_year_plural, {
+    count,
+  });
 }
 
 export function createThemeCssVariables(

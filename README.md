@@ -13,8 +13,7 @@ The calendar is rendered server-side to SVG using [D3](https://d3js.org/) and [O
 
 1. Run Corvus with Docker Compose
 2. Configure integrations in `data/integrations.yaml`
-3. Configure optional display settings and themes in `data/config.yaml`
-4. Access your contribution calendar at `http://localhost:3000/year.svg`
+3. Trigger a manual sync with `docker compose exec app corvus sync` or wait for the cron scheduled sync
 
 Self-host using docker compose:
 
@@ -125,26 +124,30 @@ integrations:
 
 ### Settings
 
+Corvus creates `data/config.yaml` automatically on first run with the default settings and built-in themes. Edit that generated file to change the defaults or add your own theme entries.
+
 ```yaml
 settings:
   title: true
   week_start: sunday
   theme: corvus
-  dark_mode: auto
+  language: auto
+  fallback_language: en
 ```
 
-| Setting      | Possible values                                                              | Default  | Description                                         |
-| ------------ | ---------------------------------------------------------------------------- | -------- | --------------------------------------------------- |
-| `title`      | `true`, `false`                                                              | `true`   | Show summary title above the calendar               |
-| `week_start` | `sunday`, `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday` | `sunday` | Day to start the week on                            |
-| `theme`      | `corvus`, `github`, or custom theme name                                     | `corvus` | Set a theme or a custom theme                       |
-| `dark_mode`  | `auto`, `light`, `dark`                                                      | `auto`   | Follow system color scheme or force light/dark mode |
+| Setting             | Possible values                                                              | Default  | Description                                           |
+| ------------------- | ---------------------------------------------------------------------------- | -------- | ----------------------------------------------------- |
+| `title`             | `true`, `false`                                                              | `true`   | Show summary title above the calendar                 |
+| `week_start`        | `sunday`, `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday` | `sunday` | Day to start the week on                              |
+| `theme`             | `corvus`, `github`, `ylgnbu` or custom theme name                            | `corvus` | Set the default theme                                 |
+| `language`          | `auto` or a locale tag matching a translation file such as `en` or `sv`      | `auto`   | Pick a translation automatically or force one         |
+| `fallback_language` | A locale tag matching a translation file such as `en`                        | `en`     | Translation to use when `language: auto` has no match |
 
-The `title`, `theme`, and `week_start` settings can also be overridden per request with query parameters, for example `/year.svg?week_start=monday&theme=github&title=false&dark_mode=dark`.
+The `title`, `week_start`, and `theme` settings can also be overridden with query parameters, for example `/year.svg?title=false&week_start=monday&theme=github&dark_mode=true`.
 
 #### Custom themes
 
-You can also create custom themes under the `themes` property in `data/config.yaml`:
+You can also edit or create custom themes under the `themes` property in `data/config.yaml`:
 
 ```yaml
 themes:
@@ -163,13 +166,24 @@ themes:
       - "#fbb4b9"
 ```
 
-Custom themes are available in addition to the built-in themes and can still be overridden with the `theme` query parameter, for example `/year.svg?theme=fuchsia`.
+Every theme listed under `themes` can be selected with the `theme` query parameter, for example `/year.svg?theme=fuchsia`.
 
 #### Dark mode
 
 Corvus supports dark mode and the calendar will automatically switch between light and dark themes using CSS `prefers-color-scheme` inside the generated SVG. This allows embedded SVGs to follow the surrounding page's color scheme.
 
 You can control dark mode with the `dark_mode` query parameter. Use `auto` to follow `prefers-color-scheme`, `true` to force dark mode, or `false` to force light mode. For example: `/year.svg?dark_mode=true`.
+
+### Translations
+
+Corvus stores translation files in `data/translations`.
+The app creates `data/translations/en.yaml` automatically on first run.
+
+To add another language:
+
+1. Copy `data/translations/en.yaml` to a new file named with the locale tag, such as `data/translations/sv.yaml`
+2. Translate the values
+3. Set `settings.language: sv` or keep `settings.language: auto`
 
 ## Environment defaults
 

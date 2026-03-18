@@ -8,45 +8,11 @@ import {
   PROVIDERS,
   type ResolvedIntegration,
 } from '../providers/index.ts';
+import { getDefaultIntegrationsTemplate } from './default-templates.ts';
 import { readEnv } from './env.ts';
 
 const CONFIG_FILE_NAME = 'integrations.yaml';
 const SUPPORTED_PROVIDERS = PROVIDERS.join(', ');
-const DEFAULT_INTEGRATIONS_CONFIG_TEMPLATE = `# Integration configuration
-# Populate this file with one or more integrations.
-#
-# Supported providers: ${SUPPORTED_PROVIDERS}
-#
-# Example:
-# integrations:
-#   - id: github-main
-#     provider: github
-#     enabled: true
-#     auth:
-#       username: octocat
-#       token: ghp_xxx
-#     source:
-#       base_url: https://api.github.com
-#     filters:
-#       author_include:
-#         - octocat
-#         - octo@example.com
-#       repository_exclude:
-#         - experimental
-#   - id: local-work
-#     provider: filepath
-#     enabled: true
-#     source:
-#       path: /Users/example/projects
-#       depth: 2
-#     filters:
-#       author_include:
-#         - your.name@example.com
-#       repository_exclude:
-#         - archive
-
-integrations: []
-`;
 
 const integrationDefinitionShellSchema = z
   .object({
@@ -91,7 +57,11 @@ export function initIntegrationsConfig(): string {
   }
 
   mkdirSync(path.dirname(configPath), { recursive: true });
-  writeFileSync(configPath, DEFAULT_INTEGRATIONS_CONFIG_TEMPLATE, 'utf8');
+  writeFileSync(
+    configPath,
+    getDefaultIntegrationsTemplate(SUPPORTED_PROVIDERS),
+    'utf8',
+  );
 
   logger.info({ configPath }, 'Created default integrations config file');
 
