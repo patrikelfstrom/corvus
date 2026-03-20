@@ -14,7 +14,7 @@ import { getDefaultTranslationTemplate } from './default-templates.ts';
 import { readEnv } from './env.ts';
 
 const TRANSLATIONS_DIRECTORY_NAME = 'translations';
-const DEFAULT_TRANSLATION_ID = 'en-us';
+const DEFAULT_TRANSLATION_ID = 'en';
 const DEFAULT_TRANSLATION_FILE_NAME = `${DEFAULT_TRANSLATION_ID}.yaml`;
 
 const nonEmptyStringSchema = z.string().trim().min(1);

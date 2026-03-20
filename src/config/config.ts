@@ -33,7 +33,7 @@ const settingsSchema = z
       .trim()
       .min(1)
       .transform((value) => value.toLowerCase())
-      .default('en-us'),
+      .default('en'),
     language: z
       .string()
       .trim()
@@ -45,7 +45,7 @@ const settingsSchema = z
     week_start: weekStartSchema,
   })
   .default({
-    fallback_language: 'en-us',
+    fallback_language: 'en',
     language: 'auto',
     title: true,
     week_start: 'sunday',

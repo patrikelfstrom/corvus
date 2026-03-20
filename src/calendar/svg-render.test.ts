@@ -246,7 +246,7 @@ test('renderCalendarSvg uses translated labels and tooltip templates', () => {
   assert.match(svg, /<title>1 bidrag<\/title>/);
 });
 
-test('renderCalendarSvg falls back to en-US when translation locale is invalid', () => {
+test('renderCalendarSvg falls back to en when translation locale is invalid', () => {
   const activities = buildPlotActivities(
     new Date('2026-01-26T00:00:00Z'),
     new Date('2026-02-03T00:00:00Z'),

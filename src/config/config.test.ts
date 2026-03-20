@@ -140,7 +140,7 @@ test('loadConfig defaults the title setting to enabled', async () => {
   await withTempConfig('themes: {}\n', () => {
     const config = loadConfig();
 
-    assert.equal(config.settings.fallbackLanguage, 'en-us');
+    assert.equal(config.settings.fallbackLanguage, 'en');
     assert.equal(config.settings.language, 'auto');
     assert.equal(config.settings.title, true);
     assert.equal(config.settings.weekStart, 'sunday');
@@ -178,13 +178,13 @@ test('loadConfig preserves configured language settings', async () => {
   await withTempConfig(
     `settings:
   language: sv-se
-  fallback_language: en-us
+  fallback_language: en
 `,
     () => {
       const config = loadConfig();
 
       assert.equal(config.settings.language, 'sv-se');
-      assert.equal(config.settings.fallbackLanguage, 'en-us');
+      assert.equal(config.settings.fallbackLanguage, 'en');
     },
   );
 });

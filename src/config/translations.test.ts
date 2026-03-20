@@ -75,17 +75,17 @@ const SWEDISH_TRANSLATION = `calendar:
     last_year_plural: "{count} bidrag det senaste aret"
 `;
 
-test('resolveAppTranslation creates and uses the default en-us translation', async () => {
+test('resolveAppTranslation creates and uses the default en translation', async () => {
   await withTempConfigAndTranslations('themes: {}\n', {}, async (directory) => {
     const translation = resolveAppTranslation({
-      fallbackLanguage: 'en-us',
+      fallbackLanguage: 'en',
       language: 'auto',
     });
 
-    assert.equal(translation.id, 'en-us');
+    assert.equal(translation.id, 'en');
     assert.equal(translation.messages.calendar.legend.less, 'Less');
     assert.equal(
-      existsSync(path.join(directory, 'translations', 'en-us.yaml')),
+      existsSync(path.join(directory, 'translations', 'en.yaml')),
       true,
     );
   });
@@ -95,7 +95,7 @@ test('resolveAppTranslation matches auto language selection from locale-tag file
   await withTempConfigAndTranslations(
     `settings:
   language: auto
-  fallback_language: en-us
+  fallback_language: en
 `,
     {
       'sv-se.yaml': SWEDISH_TRANSLATION,
@@ -103,7 +103,7 @@ test('resolveAppTranslation matches auto language selection from locale-tag file
     () => {
       const translation = resolveAppTranslation({
         acceptLanguage: 'sv-SE,sv;q=0.9,en;q=0.8',
-        fallbackLanguage: 'en-us',
+        fallbackLanguage: 'en',
         language: 'auto',
       });
 
@@ -118,7 +118,7 @@ test('resolveAppTranslation matches auto language selection from locale-tag file
   );
 });
 
-test('getLocalizedWeekdayLabels falls back to en-US for invalid locales', () => {
+test('getLocalizedWeekdayLabels falls back to en for invalid locales', () => {
   assert.deepEqual(getLocalizedWeekdayLabels('bogus_locale'), [
     'Sun',
     'Mon',
