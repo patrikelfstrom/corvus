@@ -7,6 +7,7 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 RUN bun run build
+RUN bun build scripts/cli.ts --target=bun --outfile=/tmp/corvus
 
 FROM oven/bun:1.2-slim AS runtime
 
@@ -26,7 +27,7 @@ RUN apt-get update \
 
 COPY --from=build --chown=bun:bun /app/.output ./.output
 COPY --from=build --chown=bun:bun /app/public ./public
-COPY --from=build --chown=bun:bun /app/scripts/cli.ts /usr/local/bin/corvus
+COPY --from=build --chown=bun:bun /tmp/corvus /usr/local/bin/corvus
 
 RUN chmod +x /usr/local/bin/corvus \
   && mkdir -p /app/data \
